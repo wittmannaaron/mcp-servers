@@ -312,6 +312,299 @@ class MCPClientTerminal:
         
         return "\n".join(context_parts)
     
+    def generate_html_table(self, search_results: List[Dict[str, Any]], search_terms: List[str]) -> str:
+        """Generate stacked HTML table from search results for WebKit app"""
+        # HTML template optimized for WebKit/macOS
+        html_template = """<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Suchergebnisse für: {search_terms}</title>
+    <style>
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f8f9fa;
+            line-height: 1.5;
+        }}
+        .container {{
+            max-width: 900px;
+            margin: 0 auto;
+            background-color: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.07);
+            overflow: hidden;
+        }}
+        .header {{
+            background: linear-gradient(135deg, #007acc 0%, #005c99 100%);
+            color: white;
+            padding: 25px;
+        }}
+        .header h1 {{
+            margin: 0 0 10px 0;
+            font-size: 24px;
+            font-weight: 600;
+        }}
+        .search-info {{
+            font-size: 14px;
+            opacity: 0.9;
+        }}
+        table {{
+            width: 100%;
+            border-collapse: collapse;
+        }}
+        .result-header {{
+            background-color: #f8f9fa;
+            padding: 12px 20px;
+            border-bottom: 1px solid #e9ecef;
+        }}
+        .result-header .date {{
+            font-weight: 600;
+            color: #495057;
+            margin-right: 15px;
+        }}
+        .result-header .filename {{
+            font-weight: 600;
+            color: #007acc;
+            font-size: 16px;
+        }}
+        .result-filepath {{
+            background-color: #f8f9fa;
+            padding: 12px 20px;
+            border-bottom: 1px solid #e9ecef;
+        }}
+        .filepath {{
+            font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+            font-size: 13px;
+            color: #007acc;
+            text-decoration: none;
+            word-break: break-all;
+        }}
+        .filepath:hover {{
+            text-decoration: underline;
+            background-color: rgba(0, 122, 204, 0.1);
+            padding: 2px 4px;
+            border-radius: 4px;
+        }}
+        .result-content {{
+            background-color: #ffffff;
+            padding: 15px 20px;
+            border-bottom: 1px solid #e9ecef;
+        }}
+        .content {{
+            color: #495057;
+            font-size: 14px;
+            line-height: 1.6;
+        }}
+        .content strong {{
+            color: #212529;
+            font-weight: 600;
+        }}
+        .content p {{
+            margin: 0 0 12px 0;
+        }}
+        .content p:last-child {{
+            margin-bottom: 0;
+        }}
+        .separator {{
+            height: 8px;
+            background-color: #f8f9fa;
+        }}
+        .timestamp {{
+            color: #6c757d;
+            font-size: 12px;
+            text-align: center;
+            padding: 15px;
+            background-color: #f8f9fa;
+        }}
+    </style>
+    <script>
+        // Function to open files - will work in WebKit app with proper configuration
+        function openFile(filePath) {{
+            // Try file:// protocol first (works in some WebKit configurations)
+            const fileUrl = 'file://' + filePath;
+            
+            // Try to open with window.open
+            const newWindow = window.open(fileUrl, '_blank');
+            
+            // If that fails, try alternative approaches
+            if (!newWindow || newWindow.closed || typeof newWindow.closed === 'undefined') {{
+                // For WebKit apps, you can expose a native function like:
+                // window.webkit?.messageHandlers?.fileHandler?.postMessage(filePath);
+                
+                // Fallback: copy path to clipboard
+                if (navigator.clipboard) {{
+                    navigator.clipboard.writeText(filePath).then(() => {{
+                        alert('Dateipfad wurde in die Zwischenablage kopiert:\\n' + filePath);
+                    }}).catch(() => {{
+                        // Fallback for older browsers
+                        prompt('Dateipfad (Kopieren mit Cmd+C):', filePath);
+                    }});
+                }} else {{
+                    prompt('Dateipfad (Kopieren mit Cmd+C):', filePath);
+                }}
+            }}
+        }}
+        
+        // For WebKit app integration, you can add:
+        // window.openFileNatively = function(filePath) {{
+        //     window.webkit?.messageHandlers?.fileOpener?.postMessage(filePath);
+        // }};
+    </script>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📋 Suchergebnisse</h1>
+            <div class="search-info">
+                <strong>Suchbegriffe:</strong> {search_terms} • 
+                <strong>Ergebnisse:</strong> {result_count}
+            </div>
+        </div>
+        
+        <table>
+{table_rows}
+            <tr class="separator">
+                <td></td>
+            </tr>
+        </table>
+        
+        <div class="timestamp">
+            Erstellt am {timestamp}
+        </div>
+    </div>
+</body>
+</html>"""
+
+        # Generate stacked table rows
+        table_rows = []
+        for i, result in enumerate(search_results):
+            filename = result.get("filename", "Unbekannte Datei")
+            created_at = result.get("created_at", "Unbekanntes Datum")
+            file_path = result.get("file_path", "Unbekannter Pfad")
+            content_preview = result.get("content_preview", "Kein Inhalt")
+            
+            # Format date/time to German format without seconds
+            formatted_date = self.format_german_datetime(created_at)
+            
+            # Process content with markdown
+            processed_content = self.render_simple_markdown(content_preview)
+            
+            # Escape HTML for filename only (content is already processed)
+            filename = self.escape_html(filename)
+            
+            # Create JavaScript call for file opening (works better in WebKit apps)
+            escaped_path = file_path.replace("'", "\\'")
+            
+            # Create stacked rows for this result (3 rows: date+filename, filepath, content)
+            result_rows = f"""            <!-- Result {i+1} -->
+            <tr class="result-header">
+                <td>
+                    <span class="date">{formatted_date}</span>
+                    <span class="filename">{filename}</span>
+                </td>
+            </tr>
+            <tr class="result-filepath">
+                <td><a href="#" onclick="openFile('{escaped_path}')" class="filepath">{file_path}</a></td>
+            </tr>
+            <tr class="result-content">
+                <td><div class="content">{processed_content}</div></td>
+            </tr>"""
+            
+            # Add separator between results (except after last one)
+            if i < len(search_results) - 1:
+                result_rows += """
+            <tr class="separator">
+                <td></td>
+            </tr>"""
+            
+            table_rows.append(result_rows)
+        
+        # Generate timestamp
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%d.%m.%Y um %H:%M")
+        
+        # Fill template
+        html_output = html_template.format(
+            search_terms=", ".join(search_terms),
+            result_count=len(search_results),
+            table_rows="\n".join(table_rows),
+            timestamp=timestamp
+        )
+        
+        return html_output
+    
+    def escape_html(self, text: str) -> str:
+        """Escape HTML characters"""
+        if not text:
+            return ""
+        
+        replacements = {
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#39;'
+        }
+        
+        for char, escaped in replacements.items():
+            text = text.replace(char, escaped)
+        
+        return text
+    
+    def format_german_datetime(self, datetime_str: str) -> str:
+        """Format datetime to German format DD.MM.YYYY HH:MM"""
+        try:
+            from datetime import datetime
+            if "T" in datetime_str:
+                # Parse ISO format: 2025-06-18T22:18:12.098993
+                dt = datetime.fromisoformat(datetime_str.split('.')[0])  # Remove milliseconds
+                return dt.strftime("%d.%m.%Y %H:%M")
+            else:
+                return datetime_str  # Return as-is if not recognized format
+        except:
+            return datetime_str  # Fallback to original
+    
+    def render_simple_markdown(self, text: str) -> str:
+        """Convert simple markdown to HTML, handling literal \\n strings from database"""
+        if not text:
+            return ""
+        
+        # First, convert literal \n strings to actual newlines
+        text = text.replace('\\n\\n', '\n\n').replace('\\n', '\n')
+        
+        # Escape HTML to prevent XSS
+        text = self.escape_html(text)
+        
+        # Convert **bold** to <strong>
+        import re
+        text = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', text)
+        
+        # Convert *italic* to <em> (but avoid double conversion)
+        text = re.sub(r'(?<!\*)\*([^*]+)\*(?!\*)', r'<em>\1</em>', text)
+        
+        # Split into paragraphs by double line breaks
+        paragraphs = re.split(r'\n\n+', text)
+        processed_paragraphs = []
+        
+        for paragraph in paragraphs:
+            # Convert single line breaks to <br> within paragraphs
+            paragraph = paragraph.replace('\n', '<br>')
+            if paragraph.strip():  # Only add non-empty paragraphs
+                processed_paragraphs.append(f'<p>{paragraph}</p>')
+        
+        return ''.join(processed_paragraphs)
+    
+    def save_html_output(self, html_content: str) -> None:
+        """Save HTML content to file"""
+        try:
+            with open("search_results.html", "w", encoding="utf-8") as f:
+                f.write(html_content)
+        except Exception as e:
+            print(f"Fehler beim Speichern der HTML-Datei: {e}")
+    
     def extract_keywords_with_llm(self, query: str) -> List[str]:
         """Extract keywords from German query using our tested LLM prompt"""
         try:
@@ -461,10 +754,11 @@ Output:""".format(query=query)
                         # Call MCP server
                         search_results = self.search_files_with_keywords(search_terms)
                         
-                        # Format results for user
+                        # Generate HTML table for results
                         if search_results:
-                            context = self.prepare_context(search_results)
-                            return f"**Gefundene Dateien mit '{', '.join(search_terms)}':**\n\n{context}"
+                            html_output = self.generate_html_table(search_results, search_terms)
+                            self.save_html_output(html_output)
+                            return f"HTML-Tabelle mit {len(search_results)} Ergebnissen für '{', '.join(search_terms)}' wurde erstellt und in 'search_results.html' gespeichert."
                         else:
                             return f"Keine Dateien gefunden, die '{', '.join(search_terms)}' enthalten."
                     

@@ -1,0 +1,439 @@
+from mcp.server.fastmcp import FastMCP
+import sqlite3
+from datetime import datetime
+from typing import Optional, List, Dict, Any
+import json
+
+mcp = FastMCP("file-search-server")
+
+# Database connection helper
+def get_db_connection():
+    return sqlite3.connect("/Users/aaron/Projects/Simple_MCP_DB/filebrowser.db")
+
+@mcp.tool()
+async def search_file_content(query: str, limit: int = 20) -> List[Dict[str, Any]]:
+    """
+    Search for files containing specific text content.
+    Searches in summary, categories, entities, persons, and places.
+    
+    Args:
+        query: The text to search for in file contents
+        limit: Maximum number of results to return (default: 20)
+    
+    Example: "Familie", "Bewerbung", "BMW", "Ihring"
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        # Search in multiple columns using OR
+        search_pattern = f"%{query}%"
+        cursor.execute("""
+            SELECT id, filename, file_path, extension, size, created_at, indexed_at,
+                   summary, categories, entities, persons, places,
+                   CASE 
+                       WHEN summary LIKE ? THEN 'summary'
+                       WHEN categories LIKE ? THEN 'categories' 
+                       WHEN entities LIKE ? THEN 'entities'
+                       WHEN persons LIKE ? THEN 'persons'
+                       WHEN places LIKE ? THEN 'places'
+                       ELSE 'other'
+                   END as match_type
+            FROM documents
+            WHERE summary LIKE ? COLLATE NOCASE
+               OR categories LIKE ? COLLATE NOCASE
+               OR entities LIKE ? COLLATE NOCASE  
+               OR persons LIKE ? COLLATE NOCASE
+               OR places LIKE ? COLLATE NOCASE
+               OR markdown_content LIKE ? COLLATE NOCASE
+            ORDER BY created_at DESC
+            LIMIT ?
+        """, (search_pattern, search_pattern, search_pattern, search_pattern, search_pattern,
+              search_pattern, search_pattern, search_pattern, search_pattern, search_pattern, search_pattern, limit))
+        
+        results = []
+        for row in cursor.fetchall():
+            results.append({
+                "id": row[0],
+                "filename": row[1], 
+                "path": row[2],
+                "extension": row[3],
+                "size": row[4],
+                "created_at": row[5],
+                "updated_at": row[6],
+                "summary": row[7],
+                "categories": row[8],
+                "entities": row[9], 
+                "persons": row[10],
+                "places": row[11],
+                "match_type": row[12]
+            })
+        
+        return results
+    except Exception as e:
+        return [{"error": f"Search failed: {str(e)}"}]
+    finally:
+        conn.close()
+
+@mcp.tool()
+async def search_by_category(category: str, limit: int = 30) -> List[Dict[str, Any]]:
+    """
+    Search for files by category (like Familie, Bewerbung, etc.).
+    
+    Args:
+        category: The category to search for
+        limit: Maximum results (default: 30)
+    
+    Example: "Familie", "Bewerbung", "Vertrag"
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute("""
+            SELECT id, filename, file_path, extension, size, created_at, indexed_at,
+                   document_type, categories, summary
+            FROM documents
+            WHERE categories LIKE ? COLLATE NOCASE
+            ORDER BY created_at DESC
+            LIMIT ?
+        """, (f"%{category}%", limit))
+        
+        results = []
+        for row in cursor.fetchall():
+            results.append({
+                "id": row[0],
+                "filename": row[1],
+                "path": row[2],
+                "extension": row[3],
+                "size": row[4],
+                "created_at": row[5],
+                "updated_at": row[6],
+                "document_type": row[7],
+                "categories": row[8],
+                "summary": row[9]
+            })
+        
+        return results
+    except Exception as e:
+        return [{"error": f"Category search failed: {str(e)}"}]
+    finally:
+        conn.close()
+
+@mcp.tool()
+async def search_by_person(person_name: str, limit: int = 20) -> List[Dict[str, Any]]:
+    """
+    Search for files mentioning a specific person.
+    
+    Args:
+        person_name: Name of the person to search for
+        limit: Maximum results (default: 20)
+    
+    Example: "Ihring", "Max Mustermann", "Dr. Schmidt"
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute("""
+            SELECT id, filename, file_path, extension, size, created_at, indexed_at,
+                   persons, summary
+            FROM documents
+            WHERE persons LIKE ? COLLATE NOCASE
+            ORDER BY created_at DESC
+            LIMIT ?
+        """, (f"%{person_name}%", limit))
+        
+        results = []
+        for row in cursor.fetchall():
+            results.append({
+                "id": row[0],
+                "filename": row[1],
+                "path": row[2],
+                "extension": row[3],
+                "size": row[4],
+                "created_at": row[5],
+                "updated_at": row[6],
+                "persons": row[7],
+                "summary": row[8]
+            })
+        
+        return results
+    except Exception as e:
+        return [{"error": f"Person search failed: {str(e)}"}]
+    finally:
+        conn.close()
+
+@mcp.tool()
+async def search_files_by_date(start_date: str, end_date: str, limit: int = 50) -> List[Dict[str, Any]]:
+    """
+    Find files created within a specific date range.
+    
+    Args:
+        start_date: Start date in YYYY-MM-DD format
+        end_date: End date in YYYY-MM-DD format  
+        limit: Maximum number of results (default: 50)
+    
+    Example: start_date="2024-01-01", end_date="2024-12-31"
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute("""
+            SELECT id, filename, file_path, extension, size, created_at, indexed_at
+            FROM documents 
+            WHERE DATE(created_at) BETWEEN ? AND ?
+            ORDER BY created_at DESC
+            LIMIT ?
+        """, (start_date, end_date, limit))
+        
+        results = []
+        for row in cursor.fetchall():
+            results.append({
+                "id": row[0],
+                "filename": row[1],
+                "path": row[2], 
+                "extension": row[3],
+                "size": row[4],
+                "created_at": row[5],
+                "updated_at": row[6]
+            })
+        
+        return results
+    except Exception as e:
+        return [{"error": f"Date search failed: {str(e)}"}]
+    finally:
+        conn.close()
+
+@mcp.tool()
+async def find_duplicate_files(min_size: int = 1024) -> List[Dict[str, Any]]:
+    """
+    Find potential duplicate files based on identical file sizes.
+    
+    Args:
+        min_size: Minimum file size in bytes to consider (default: 1024)
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute("""
+            SELECT size, GROUP_CONCAT(filename || ' (' || file_path || ')' , ' | ') as files,
+                   COUNT(*) as file_count
+            FROM documents 
+            WHERE size IS NOT NULL AND size >= ? AND size > 0
+            GROUP BY size
+            HAVING COUNT(*) > 1
+            ORDER BY size DESC
+        """, (min_size,))
+        
+        results = []
+        for row in cursor.fetchall():
+            results.append({
+                "size": row[0],
+                "files": row[1].split(' | ') if row[1] else [],
+                "duplicate_count": row[2]
+            })
+        
+        return results
+    except Exception as e:
+        return [{"error": f"Duplicate search failed: {str(e)}"}]
+    finally:
+        conn.close()
+
+@mcp.tool()
+async def search_by_filename(filename_pattern: str, limit: int = 30) -> List[Dict[str, Any]]:
+    """
+    Search for files by filename pattern (case-insensitive).
+    
+    Args:
+        filename_pattern: Pattern to match in filename (supports % wildcards)
+        limit: Maximum results (default: 30)
+    
+    Example: "report%", "%meeting%", "contract%pdf"
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute("""
+            SELECT id, filename, file_path, extension, size, created_at, indexed_at
+            FROM documents
+            WHERE filename LIKE ? COLLATE NOCASE
+            ORDER BY created_at DESC
+            LIMIT ?
+        """, (filename_pattern, limit))
+        
+        results = []
+        for row in cursor.fetchall():
+            results.append({
+                "id": row[0],
+                "filename": row[1],
+                "path": row[2],
+                "extension": row[3],
+                "size": row[4], 
+                "created_at": row[5],
+                "updated_at": row[6]
+            })
+        
+        return results
+    except Exception as e:
+        return [{"error": f"Filename search failed: {str(e)}"}]
+    finally:
+        conn.close()
+
+@mcp.tool()
+async def search_by_extension(extension: str, limit: int = 50) -> List[Dict[str, Any]]:
+    """
+    Find all files with a specific extension.
+    
+    Args:
+        extension: File extension (without dot, e.g., 'pdf', 'docx', 'txt')
+        limit: Maximum results (default: 50)
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        # Extension mit Punkt suchen falls ohne angegeben
+        if not extension.startswith('.'):
+            extension = '.' + extension
+        
+        cursor.execute("""
+            SELECT id, filename, file_path, extension, size, created_at, indexed_at
+            FROM documents
+            WHERE extension = ? COLLATE NOCASE
+            ORDER BY created_at DESC  
+            LIMIT ?
+        """, (extension, limit))
+        
+        results = []
+        for row in cursor.fetchall():
+            results.append({
+                "id": row[0],
+                "filename": row[1],
+                "path": row[2],
+                "extension": row[3],
+                "size": row[4],
+                "created_at": row[5],
+                "updated_at": row[6]
+            })
+        
+        return results
+    except Exception as e:
+        return [{"error": f"Extension search failed: {str(e)}"}]
+    finally:
+        conn.close()
+
+@mcp.tool()
+async def get_file_details(file_id: int) -> Dict[str, Any]:
+    """
+    Get detailed information about a specific file by ID.
+    
+    Args:
+        file_id: The unique ID of the file
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute("""
+            SELECT id, file_path, filename, extension, size, created_at, indexed_at, 
+                   document_type, summary, categories, entities, persons, places,
+                   mentioned_dates, file_references
+            FROM documents WHERE id = ?
+        """, (file_id,))
+        
+        file_data = cursor.fetchone()
+        if not file_data:
+            return {"error": "File not found"}
+        
+        result = {
+            "id": file_data[0],
+            "path": file_data[1], 
+            "filename": file_data[2],
+            "extension": file_data[3],
+            "size": file_data[4],
+            "created_at": file_data[5],
+            "updated_at": file_data[6],
+            "document_type": file_data[7],
+            "summary": file_data[8],
+            "categories": file_data[9],
+            "entities": file_data[10],
+            "persons": file_data[11],
+            "places": file_data[12],
+            "mentioned_dates": file_data[13],
+            "file_references": file_data[14]
+        }
+        
+        return result
+    except Exception as e:
+        return {"error": f"File details failed: {str(e)}"}
+    finally:
+        conn.close()
+
+@mcp.tool()
+async def get_database_stats() -> Dict[str, Any]:
+    """
+    Get basic statistics about the file database.
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        # Total files
+        cursor.execute("SELECT COUNT(*) FROM documents")
+        total_files = cursor.fetchone()[0]
+        
+        # Total size - handle NULLs properly
+        cursor.execute("SELECT SUM(COALESCE(size, 0)) FROM documents WHERE size IS NOT NULL")
+        total_size_result = cursor.fetchone()
+        total_size = total_size_result[0] if total_size_result and total_size_result[0] else 0
+        
+        # Files by extension
+        cursor.execute("""
+            SELECT extension, COUNT(*) as count
+            FROM documents
+            WHERE extension IS NOT NULL
+            GROUP BY extension
+            ORDER BY count DESC
+            LIMIT 10
+        """)
+        extensions = [{"extension": row[0], "count": row[1]} for row in cursor.fetchall()]
+        
+        # Files by document type
+        cursor.execute("""
+            SELECT document_type, COUNT(*) as count
+            FROM documents
+            WHERE document_type IS NOT NULL
+            GROUP BY document_type
+            ORDER BY count DESC
+            LIMIT 5
+        """)
+        doc_types = [{"type": row[0], "count": row[1]} for row in cursor.fetchall()]
+        
+        # Available categories
+        cursor.execute("""
+            SELECT DISTINCT categories
+            FROM documents 
+            WHERE categories IS NOT NULL AND categories != '[]'
+            LIMIT 10
+        """)
+        categories = [row[0] for row in cursor.fetchall()]
+        
+        return {
+            "total_files": total_files,
+            "total_size_bytes": total_size,
+            "total_size_mb": round(total_size / 1024 / 1024, 2) if total_size > 0 else 0,
+            "top_extensions": extensions,
+            "document_types": doc_types,
+            "sample_categories": categories
+        }
+    except Exception as e:
+        return {"error": f"Database stats failed: {str(e)}"}
+    finally:
+        conn.close()
+
+if __name__ == "__main__":
+    mcp.run(transport='stdio')
