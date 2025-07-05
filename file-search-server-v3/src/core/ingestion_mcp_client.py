@@ -79,6 +79,7 @@ class IngestionMCPClient:
     async def analyze_document_with_llm(self, file_path: str, filename: str, extension: str, original_text: str) -> Dict[str, Any]:
         """
         Analyze document content using LLM and return structured metadata.
+        Simplified and robust JSON parsing.
 
         Args:
             file_path: Full path to the document
@@ -96,22 +97,17 @@ class IngestionMCPClient:
 
             # Call Ollama LLM
             llm_response = await self._call_ollama(prompt, system_prompt)
+            
+            if not llm_response or not llm_response.strip():
+                logger.warning(f"Empty LLM response for {filename}")
+                return get_error_fallback_metadata(file_path, filename)
 
-            # Parse JSON response with robust error handling
-            try:
-                # First try direct parsing
-                metadata = json.loads(llm_response)
+            # Simple and robust JSON extraction
+            metadata = self._extract_json_simple(llm_response, filename)
+            if metadata:
                 logger.debug(f"Successfully analyzed document: {filename}")
                 return metadata
-            except json.JSONDecodeError as e:
-                logger.warning(f"Failed to parse LLM response as JSON for {filename}: {e}")
-                logger.debug(f"Raw LLM response (first 500 chars): {llm_response[:500]}...")
-                
-                # Try multiple extraction strategies
-                metadata = self._extract_json_from_response(llm_response, filename)
-                if metadata:
-                    return metadata
-                
+            else:
                 logger.warning(f"Using fallback metadata for {filename} due to unparseable LLM response")
                 return get_error_fallback_metadata(file_path, filename)
 
@@ -312,9 +308,9 @@ class IngestionMCPClient:
                 raise RuntimeError(f"MCP result parsing failed: {text}")
         return []
 
-    def _extract_json_from_response(self, response: str, filename: str) -> dict:
+    def _extract_json_simple(self, response: str, filename: str) -> dict:
         """
-        Extract JSON from LLM response using multiple strategies.
+        Simplified JSON extraction with robust error handling.
         
         Args:
             response: Raw LLM response
@@ -325,104 +321,98 @@ class IngestionMCPClient:
         """
         import re
         
-        strategies = [
-            # Strategy 1: Look for ```json blocks
-            (r'```json\s*(\{.*?\})\s*```', "JSON code block"),
-            # Strategy 2: Look for { } blocks (greedy)
-            (r'(\{.*\})', "Curly brace block"),
-            # Strategy 3: Look for { } blocks (non-greedy)
-            (r'(\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\})', "Nested JSON structure"),
-            # Strategy 4: Look for JSON starting with specific keys
-            (r'(\{\s*"summary".*?\})', "Summary-based JSON"),
-        ]
+        logger.debug(f"Extracting JSON from response for {filename} (length: {len(response)})")
         
-        for pattern, strategy_name in strategies:
-            try:
-                match = re.search(pattern, response, re.DOTALL | re.IGNORECASE)
-                if match:
-                    json_str = match.group(1).strip()
-                    
-                    # Clean up common issues
-                    json_str = self._clean_json_string(json_str)
-                    
-                    # Try to parse
-                    metadata = json.loads(json_str)
-                    logger.info(f"Successfully extracted JSON using {strategy_name} for {filename}")
-                    return metadata
-                    
-            except (json.JSONDecodeError, AttributeError) as e:
-                logger.debug(f"Strategy '{strategy_name}' failed for {filename}: {e}")
-                continue
+        # Step 1: Find JSON boundaries
+        start_pos = response.find('{')
+        if start_pos == -1:
+            logger.warning(f"No opening brace found in response for {filename}")
+            return None
+            
+        # Step 2: Find matching closing brace by counting braces
+        brace_count = 0
+        end_pos = -1
         
-        # Last resort: try to build JSON from key-value pairs
+        for i in range(start_pos, len(response)):
+            if response[i] == '{':
+                brace_count += 1
+            elif response[i] == '}':
+                brace_count -= 1
+                if brace_count == 0:
+                    end_pos = i
+                    break
+        
+        if end_pos == -1:
+            logger.warning(f"No matching closing brace found for {filename}")
+            return None
+            
+        # Step 3: Extract JSON string
+        json_str = response[start_pos:end_pos + 1]
+        logger.debug(f"Extracted JSON string for {filename}: {json_str[:200]}...")
+        
+        # Step 4: Clean and parse
         try:
-            return self._build_json_from_text(response, filename)
+            json_str = self._clean_json_simple(json_str)
+            metadata = json.loads(json_str)
+            
+            # Validate required fields
+            if self._validate_metadata(metadata):
+                logger.info(f"Successfully extracted and validated JSON for {filename}")
+                return metadata
+            else:
+                logger.warning(f"JSON validation failed for {filename}")
+                return None
+                
+        except json.JSONDecodeError as e:
+            logger.warning(f"JSON parsing failed for {filename}: {e}")
+            logger.debug(f"Failed JSON string: {json_str}")
+            return None
         except Exception as e:
-            logger.debug(f"Text parsing fallback failed for {filename}: {e}")
+            logger.error(f"Unexpected error during JSON extraction for {filename}: {e}")
             return None
 
-    def _clean_json_string(self, json_str: str) -> str:
-        """Clean common JSON formatting issues."""
+    def _clean_json_simple(self, json_str: str) -> str:
+        """Simple JSON cleaning with minimal processing."""
+        import re
+        
         # Remove trailing commas before closing braces/brackets
         json_str = re.sub(r',(\s*[}\]])', r'\1', json_str)
         
-        # Fix unescaped quotes in strings (basic attempt)
-        # This is a simple fix - more complex cases might still fail
-        json_str = re.sub(r'(?<!\\)"(?=.*".*:)', '\\"', json_str)
+        # Remove any trailing text after the last }
+        last_brace = json_str.rfind('}')
+        if last_brace != -1:
+            json_str = json_str[:last_brace + 1]
         
-        # Remove any text before first { and after last }
-        start = json_str.find('{')
-        end = json_str.rfind('}')
-        if start != -1 and end != -1 and end > start:
-            json_str = json_str[start:end+1]
-        
-        return json_str
-
-    def _build_json_from_text(self, response: str, filename: str) -> dict:
-        """
-        Last resort: try to extract key-value pairs from text.
-        This is a very basic implementation.
-        """
-        import re
-        
-        # Look for key-value patterns
-        patterns = {
-            'summary': r'"summary":\s*"([^"]*)"',
-            'document_type': r'"document_type":\s*"([^"]*)"',
-            'categories': r'"categories":\s*\[([^\]]*)\]',
-            'entities': r'"entities":\s*\[([^\]]*)\]',
-            'persons': r'"persons":\s*\[([^\]]*)\]',
-            'places': r'"places":\s*\[([^\]]*)\]',
-            'mentioned_dates': r'"mentioned_dates":\s*\[([^\]]*)\]',
-            'file_references': r'"file_references":\s*\[([^\]]*)\]',
+        return json_str.strip()
+    
+    def _validate_metadata(self, metadata: dict) -> bool:
+        """Validate that metadata contains required fields with correct types."""
+        required_fields = {
+            'summary': str,
+            'document_type': str,
+            'categories': list,
+            'entities': list,
+            'persons': list,
+            'places': list,
+            'mentioned_dates': list,
+            'file_references': list,
+            'language': str,
+            'sentiment': str,
+            'complexity': str,
+            'word_count_estimate': (int, float)
         }
         
-        result = {}
-        for key, pattern in patterns.items():
-            match = re.search(pattern, response, re.IGNORECASE)
-            if match:
-                value = match.group(1).strip()
-                if key in ['categories', 'entities', 'persons', 'places', 'mentioned_dates', 'file_references']:
-                    # Parse array
-                    if value:
-                        items = [item.strip().strip('"') for item in value.split(',')]
-                        result[key] = [item for item in items if item]
-                    else:
-                        result[key] = []
-                else:
-                    result[key] = value
+        for field, expected_type in required_fields.items():
+            if field not in metadata:
+                logger.debug(f"Missing required field: {field}")
+                return False
+            
+            if not isinstance(metadata[field], expected_type):
+                logger.debug(f"Field {field} has wrong type: {type(metadata[field])} (expected {expected_type})")
+                return False
         
-        # Add defaults for missing keys
-        fallback = get_error_fallback_metadata("", filename)
-        for key, default_value in fallback.items():
-            if key not in result:
-                result[key] = default_value
-        
-        if result:
-            logger.info(f"Built JSON from text patterns for {filename}")
-            return result
-        
-        return None
+        return True
+
 
     async def _initialize_database_schema(self):
         """Initialize database schema if it doesn't exist."""

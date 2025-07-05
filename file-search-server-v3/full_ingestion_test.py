@@ -17,26 +17,14 @@ from src.core.ingestion import IngestionOrchestrator
 from src.core.events import FileEvent, FileEventType
 from src.database.database import DocumentStore
 from src.core.mcp_client import get_mcp_client
+from src.core.logging_config import setup_logging
 
 
 class TestStopHandler:
     """Custom log handler that stops the test on WARNING or ERROR."""
     
     def __init__(self):
-        self.warnings = 0
-        self.errors = 0
         self.should_stop = False
-        
-        # Keywords that indicate critical issues
-        self.critical_keywords = [
-            "Failed to parse LLM response",
-            "Failed to extract/preprocess",
-            "Failed to store",
-            "storage failure",
-            "Extraction failed",
-            "processing failed",
-            "codec can't decode"
-        ]
     
     def emit(self, record):
         """Handle log records and check for stop conditions."""
@@ -48,19 +36,11 @@ class TestStopHandler:
                 
             if level_name in ['WARNING', 'ERROR']:
                 message = str(record.message) if hasattr(record, 'message') else str(record)
-                
-                # Check if this is a critical warning/error
-                if any(keyword.lower() in message.lower() for keyword in self.critical_keywords):
-                    if level_name == 'WARNING':
-                        self.warnings += 1
-                    elif level_name == 'ERROR':
-                        self.errors += 1
-                    
-                    logger.error(f"CRITICAL {level_name} detected: {message}")
-                    logger.error("Stopping test due to critical issue.")
-                    self.should_stop = True
+                print(f"[TestStopHandler] {level_name} detected - stopping test!")
+                print(f"[TestStopHandler] Message: {message}")
+                self.should_stop = True
         except Exception as e:
-            # Don't let handler errors break the test
+            print(f"[TestStopHandler] Error in handler: {e}")
             pass
 
 
@@ -91,8 +71,12 @@ async def run_ingestion_test():
     Runs the full ingestion test, processing all files in the specified
     directory and reporting on the results.
     """
-    # Set up the test stop handler
+    # Setup global logging configuration first
+    setup_logging()
+    
+    # Set up the test stop handler to capture all WARNING and ERROR messages
     test_handler = TestStopHandler()
+    # Use DEBUG level to ensure we capture everything, then filter in the handler
     logger.add(test_handler.emit, level="DEBUG")
     
     test_dir = Path("/Users/aaron/Documents/Anke_docs_bak_19-07-24-0958")
@@ -172,26 +156,17 @@ async def run_ingestion_test():
         for f in failed_to_process:
             logger.warning(f"  - {f}")
     
-    # Show test handler statistics
-    logger.info(f"Test handler detected {test_handler.warnings} critical warnings and {test_handler.errors} critical errors")
+    # Check if test was stopped due to warnings/errors
     if test_handler.should_stop:
-        logger.error("TEST FAILED: Stopped due to critical issues")
+        logger.error("TEST FAILED: Stopped due to WARNING or ERROR")
         return False
     else:
-        logger.success("TEST PASSED: No critical issues detected")
+        logger.success("TEST PASSED: No warnings or errors detected")
         return True
 
 
-if __name__ == "__main__":
-    import sys
-    
-    # Run the test
-    success = asyncio.run(test_full_ingestion())
-    
-    # Exit with appropriate code
-    sys.exit(0 if success else 1)
-
-    # Final database verification
+async def verify_database():
+    """Verify the database contents after ingestion."""
     async with get_mcp_client() as client:
         result = await client.read_query("SELECT COUNT(*) as count FROM documents")
         total_docs = result[0]['count'] if result else 0
@@ -202,5 +177,24 @@ if __name__ == "__main__":
         for row in result:
             logger.info(f"  - {row['document_type']}: {row['count']}")
 
+
+async def main():
+    """Main function that runs the test and verifies the database."""
+    # Run the ingestion test
+    success = await run_ingestion_test()
+    
+    if success:
+        # Verify database contents
+        await verify_database()
+    
+    return success
+
+
 if __name__ == "__main__":
-    asyncio.run(run_ingestion_test())
+    import sys
+    
+    # Run the main function
+    success = asyncio.run(main())
+    
+    # Exit with appropriate code
+    sys.exit(0 if success else 1)

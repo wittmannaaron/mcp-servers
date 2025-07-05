@@ -77,6 +77,15 @@ This extracted server contains:
    # Edit .env with your settings
    ```
 
+   **Logging Configuration:**
+   The log level can be configured in the `.env` file:
+   ```bash
+   # Available log levels: DEBUG, INFO, WARNING, ERROR, CRITICAL
+   LOG_LEVEL="WARNING"
+   ```
+   
+   Note: Individual test scripts like `full_ingestion_test.py` may have their own logging configurations that override the global setting.
+
 4. **Run the server:**
    ```bash
    python main.py

@@ -25,48 +25,46 @@ DOKUMENT INFORMATIONEN:
 - Dateierweiterung: {extension}
 
 DOKUMENTENINHALT:
-{original_text[:150000]}  # Begrenzt auf 150000 Zeichen für llama3.2 Token-Window
+{original_text[:50000]}
 
 AUFGABE:
-Analysiere den Dokumenteninhalt und erstelle strukturierte Metadaten. Antworte EXAKT in diesem JSON-Format:
+Erstelle strukturierte Metadaten. Antworte EXAKT mit diesem JSON-Format (VOLLSTÄNDIG und OHNE Abkürzungen):
 
 {{
-    "summary": "Eine prägnante 2-3 Satz Zusammenfassung des Dokumenteninhalts",
-    "document_type": "Bewerbung",
-    "categories": ["Kategorie1", "Kategorie2"],
-    "entities": ["Organisation1", "Konzept1"],
-    "persons": ["Max Mustermann", "Dr. Maria Schmidt"],
-    "places": ["Berlin", "Deutschland", "Musterstraße 123"],
-    "mentioned_dates": ["2024-01-15", "15.01.2024"],
-    "file_references": ["dokument.pdf", "anhang.xlsx"],
+    "summary": "Kurze Zusammenfassung des Inhalts",
+    "document_type": "Rechtsstreit",
+    "categories": ["Kategorie1"],
+    "entities": [],
+    "persons": [],
+    "places": [],
+    "mentioned_dates": [],
+    "file_references": [],
     "language": "de",
     "sentiment": "neutral",
     "complexity": "medium",
-    "word_count_estimate": 150
+    "word_count_estimate": 100
 }}
 
-RICHTLINIEN:
-- summary: Maximal 200 Zeichen, fokussiert auf Hauptinhalt
-- document_type: Wähle EINEN Typ: email, Behörde, Steuer, Bewerbung, Finance, Job, Vertrag, Rechnung, Brief, Notizen, Bericht, Anleitung
-- categories: 2-4 thematische Kategorien (z.B. "Business", "Technik", "Verwaltung")
-- entities: Organisationen, Firmen, Konzepte, Produkte (KEINE Personen oder Orte)
-- persons: Alle erwähnten Personen mit vollständigen Namen
-- places: Orte, Adressen, Länder, Städte
-- mentioned_dates: Alle Daten im Format YYYY-MM-DD oder DD.MM.YYYY
-- file_references: Erwähnte Dateinamen mit Erweiterung
-- language: Hauptsprache (de, en, fr, it)
-- sentiment: neutral, positive oder negative
-- complexity: low, medium oder high
-- word_count_estimate: Geschätzte Anzahl Wörter als Zahl
+REGELN:
+- summary: Maximal 150 Zeichen
+- document_type: Wähle: email, Rechtsstreit, Familie, Finanzamt, Gericht, Bewerbung, Finanzen, Vertrag, Entwurf, Bericht, Bilanzen, Hauseigentum
+- categories: 1-3 Kategorien (Business, Technik, Verwaltung, Finanz, etc.)
+- entities: Firmen, Organisationen (KEINE Personen)
+- persons: Vollständige Namen von Personen
+- places: Orte, Adressen, Städte
+- mentioned_dates: Daten im Format YYYY-MM-DD oder DD.MM.YYYY
+- file_references: Erwähnte Dateinamen
+- language: de, en, fr, it
+- sentiment: neutral, positive, negative
+- complexity: low, medium, high
+- word_count_estimate: Zahl (geschätzte Wortanzahl)
 
-WICHTIG: Verwende nur gültiges JSON ohne Kommentare oder zusätzliche Zeichen!
-
-WICHTIG:
-- Antworte NUR mit dem JSON-Objekt
-- Keine zusätzlichen Erklärungen oder Formatierung
-- Alle Strings in Anführungszeichen
-- Arrays auch bei nur einem Element verwenden
-- Bei unklarem Inhalt verwende "unbekannt" oder leere Arrays
+KRITISCH WICHTIG:
+- Antworte NUR mit dem vollständigen JSON-Objekt
+- KEINE zusätzlichen Texte oder Erklärungen
+- Das JSON MUSS vollständig und gültig sein
+- ALLE Felder müssen vorhanden sein
+- Verwende leere Arrays [] wenn keine Werte vorhanden
 """
 
     return prompt
@@ -75,9 +73,10 @@ def get_ollama_system_prompt() -> str:
     """
     System prompt for Ollama to ensure consistent JSON responses.
     """
-    return """Du bist ein Dokumentenanalyst, der strukturierte JSON-Metadaten erstellt.
-Antworte IMMER nur mit gültigem JSON ohne zusätzliche Erklärungen oder Formatierung.
-Verwende deutsche Begriffe für Kategorien und Themen, aber englische Schlüssel im JSON."""
+    return """Du bist ein JSON-Generator für Dokumentenanalyse.
+WICHTIG: Antworte AUSSCHLIESSLICH mit vollständigem, gültigem JSON.
+KEINE zusätzlichen Texte, Erklärungen oder Formatierungen.
+Das JSON muss vollständig sein und alle erforderlichen Felder enthalten."""
 
 def get_error_fallback_metadata(file_path: str, filename: str) -> dict:
     """
