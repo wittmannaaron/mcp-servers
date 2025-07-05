@@ -18,8 +18,9 @@ from src.core.events import FileEvent, FileEventType
 from src.database.database import DocumentStore
 from src.core.mcp_client import get_mcp_client
 from src.core.logging_config import setup_logging
-
-
+from clear_database import clear_database_file
+ 
+ 
 class TestStopHandler:
     """Custom log handler that stops the test on WARNING or ERROR."""
     
@@ -180,6 +181,10 @@ async def verify_database():
 
 async def main():
     """Main function that runs the test and verifies the database."""
+    # Clear the database before starting the test
+    logger.info("Clearing database for a fresh test run...")
+    clear_database_file()
+
     # Run the ingestion test
     success = await run_ingestion_test()
     

@@ -1,0 +1,11 @@
+# Task ID: 4
+# Title: Integrate Chunking and Embedding Services with Ingestion Pipeline
+# Status: pending
+# Dependencies: 1, 2, 3
+# Priority: high
+# Description: Modify the ingestion pipeline to use the new chunking and embedding services.
+# Details:
+The pipeline will pass Markdown text through the chunking service and then pass the chunks through the embedding service.
+
+# Test Strategy:
+Test the pipeline with different Markdown texts to ensure it works correctly.

@@ -1,0 +1,11 @@
+# Task ID: 11
+# Title: Extend Database Schema for Semantic Search
+# Status: pending
+# Dependencies: 1, 5
+# Priority: high
+# Description: Create a new 'chunks' table and a virtual 'chunk_vectors' table to support semantic search features
+# Details:
+Create a new table 'chunks' with columns: id (INTEGER, PRIMARY KEY), document_id (INTEGER, FOREIGN KEY to documents.id), chunk_index (INTEGER), content (TEXT), and char_count (INTEGER). Create a new virtual table 'chunk_vectors' using the sqlite-vss extension to store and index vector embeddings for efficient similarity search.
+
+# Test Strategy:
+Verify that both tables are created successfully and can store data. Test the schema and data integrity.

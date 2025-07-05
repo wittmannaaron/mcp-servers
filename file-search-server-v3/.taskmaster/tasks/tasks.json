@@ -1,0 +1,221 @@
+{
+  "master": {
+    "tasks": [
+      {
+        "id": 1,
+        "title": "Create Chunks Table in Database",
+        "description": "Create a new table 'chunks' in the database to store text chunks derived from documents.",
+        "details": "The table will have the following columns: id (INTEGER, PRIMARY KEY), document_id (INTEGER, FOREIGN KEY to documents.id), chunk_index (INTEGER), content (TEXT), and char_count (INTEGER).",
+        "testStrategy": "Verify that the table is created successfully and can store data.",
+        "priority": "high",
+        "dependencies": [],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 2,
+        "title": "Implement Context-Aware Chunking Service",
+        "description": "Create a new service that can split Markdown text into chunks based on semantic boundaries.",
+        "details": "The service will have a function 'chunk_text' that takes Markdown text as input and returns a list of chunks.",
+        "testStrategy": "Test the function with different Markdown texts to ensure it works correctly.",
+        "priority": "high",
+        "dependencies": [],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 3,
+        "title": "Create Embedding Service",
+        "description": "Create a new service that can create embeddings for text chunks.",
+        "details": "The service will have a function 'create_embeddings' that takes a list of texts and returns a list of embeddings.",
+        "testStrategy": "Test the function with different texts to ensure it works correctly.",
+        "priority": "high",
+        "dependencies": [],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 4,
+        "title": "Integrate Chunking and Embedding Services with Ingestion Pipeline",
+        "description": "Modify the ingestion pipeline to use the new chunking and embedding services.",
+        "details": "The pipeline will pass Markdown text through the chunking service and then pass the chunks through the embedding service.",
+        "testStrategy": "Test the pipeline with different Markdown texts to ensure it works correctly.",
+        "priority": "high",
+        "dependencies": [
+          1,
+          2,
+          3
+        ],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 5,
+        "title": "Create Vector Table for Similarity Search",
+        "description": "Create a new virtual table 'chunk_vectors' to store vector embeddings for similarity search.",
+        "details": "The table will be used to store embeddings for chunks and perform similarity searches.",
+        "testStrategy": "Verify that the table is created successfully and can store data.",
+        "priority": "high",
+        "dependencies": [],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 6,
+        "title": "Implement Semantic Search API",
+        "description": "Create a new API method 'search_semantic' to perform semantic searches.",
+        "details": "The method will take a query text and return a list of relevant documents or chunks.",
+        "testStrategy": "Test the method with different query texts to ensure it works correctly.",
+        "priority": "high",
+        "dependencies": [
+          4,
+          5
+        ],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 7,
+        "title": "Write Unit Tests for Chunking Service",
+        "description": "Write unit tests for the chunking service to ensure it works correctly.",
+        "details": "The tests will cover different scenarios and edge cases.",
+        "testStrategy": "Run the tests and verify that they pass.",
+        "priority": "medium",
+        "dependencies": [
+          2
+        ],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 8,
+        "title": "Write Unit Tests for Embedding Service",
+        "description": "Write unit tests for the embedding service to ensure it works correctly.",
+        "details": "The tests will cover different scenarios and edge cases.",
+        "testStrategy": "Run the tests and verify that they pass.",
+        "priority": "medium",
+        "dependencies": [
+          3
+        ],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 9,
+        "title": "Optimize Performance of Embedding Process",
+        "description": "Optimize the performance of the embedding process to improve efficiency.",
+        "details": "The optimization will focus on batching and parallel processing.",
+        "testStrategy": "Test the performance of the optimized process.",
+        "priority": "low",
+        "dependencies": [
+          4
+        ],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 10,
+        "title": "Document Code and APIs",
+        "description": "Document the code and APIs to ensure they are easy to understand and use.",
+        "details": "The documentation will cover the usage and behavior of the APIs.",
+        "testStrategy": "Review the documentation to ensure it is accurate and complete.",
+        "priority": "low",
+        "dependencies": [],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 11,
+        "title": "Extend Database Schema for Semantic Search",
+        "description": "Create a new 'chunks' table and a virtual 'chunk_vectors' table to support semantic search features",
+        "details": "Create a new table 'chunks' with columns: id (INTEGER, PRIMARY KEY), document_id (INTEGER, FOREIGN KEY to documents.id), chunk_index (INTEGER), content (TEXT), and char_count (INTEGER). Create a new virtual table 'chunk_vectors' using the sqlite-vss extension to store and index vector embeddings for efficient similarity search.",
+        "testStrategy": "Verify that both tables are created successfully and can store data. Test the schema and data integrity.",
+        "status": "done",
+        "dependencies": [
+          1,
+          5
+        ],
+        "priority": "high",
+        "subtasks": []
+      },
+      {
+        "id": 12,
+        "title": "Implement Context-Aware Chunking Service",
+        "description": "Create a new service that can split Markdown text into chunks based on semantic boundaries.",
+        "details": "Implement a function 'chunk_text' in a new module 'src/core/chunking_service.py' that takes Markdown text as input and returns a list of chunks. The function should prioritize splitting along headers, paragraphs, lists, and code blocks to maintain context within each chunk.",
+        "testStrategy": "Test the function with different Markdown texts to ensure it works correctly. Verify that the function handles edge cases such as empty input, single-line text, and text with multiple consecutive headers.",
+        "status": "done",
+        "dependencies": [
+          1
+        ],
+        "priority": "high",
+        "subtasks": []
+      },
+      {
+        "id": 13,
+        "title": "Implement Embedding Service",
+        "description": "Create a new service that can create embeddings for text chunks.",
+        "status": "done",
+        "dependencies": [
+          2,
+          4
+        ],
+        "priority": "high",
+        "details": "Implement a new module at 'src/core/embedding_service.py' that provides a function 'create_embeddings' to take a list of texts and return their vector embeddings. The function should support batching to process multiple texts efficiently in a single call. The service will utilize the 'bge-m3' model available via the local Ollama service.",
+        "testStrategy": "Test the 'create_embeddings' function with different inputs to ensure it works correctly. Verify that the function handles edge cases such as empty input, single text, and multiple texts. Test the performance of the function with large inputs.",
+        "subtasks": []
+      },
+      {
+        "id": 14,
+        "title": "Integrate Chunking and Embedding Services into Ingestion Pipeline",
+        "description": "Modify the ingestion pipeline to use the new chunking and embedding services.",
+        "details": "Implement the ingestion pipeline to call the chunking service with Markdown text, then pass the resulting chunks to the embedding service. Store the chunks and their corresponding vector embeddings in the database. Ensure error handling for each step.",
+        "testStrategy": "Test the ingestion pipeline with different Markdown texts to ensure it works correctly. Verify that the pipeline handles edge cases such as empty input, single text, and multiple texts. Test the performance of the pipeline with large inputs.",
+        "status": "done",
+        "dependencies": [
+          2,
+          3,
+          12,
+          13
+        ],
+        "priority": "high",
+        "subtasks": []
+      },
+      {
+        "id": 15,
+        "title": "Implement Semantic Search API",
+        "description": "Implement a new API method 'search_semantic' to perform semantic searches",
+        "details": "Add a new method 'search_semantic' to the 'DocumentStore' class in 'src/database/database.py'. This method should take a query string, generate an embedding for it using the Embedding Service, and then perform a vector similarity search against the 'chunk_vectors' table to find the most relevant chunks. The results should be returned in a clear and usable format. Expose this new search functionality via an endpoint in the API ('src/api/main.py').",
+        "testStrategy": "Test the 'search_semantic' method with different query strings to ensure it works correctly. Verify that the method returns relevant results and handles edge cases such as empty query strings or queries with special characters.",
+        "status": "done",
+        "dependencies": [
+          13,
+          14
+        ],
+        "priority": "high",
+        "subtasks": []
+      },
+      {
+        "id": 16,
+        "title": "End-to-End Testing and Validation",
+        "description": "Create a comprehensive suite of tests to validate the entire semantic search pipeline",
+        "details": "Implement unit tests for the Chunking and Embedding services. Develop integration tests for the ingestion pipeline. Perform functional testing of the semantic search API. Ensure that the tests cover various scenarios, edge cases, and performance aspects.",
+        "testStrategy": "Run unit tests for individual components. Perform integration testing for the ingestion pipeline. Conduct functional testing of the semantic search API. Verify that the system handles different inputs, edge cases, and performance requirements.",
+        "status": "done",
+        "dependencies": [
+          2,
+          3,
+          12,
+          13
+        ],
+        "priority": "medium",
+        "subtasks": []
+      }
+    ],
+    "metadata": {
+      "created": "2025-07-05T19:11:38.492Z",
+      "updated": "2025-07-05T21:28:30.007Z",
+      "description": "Tasks for master context"
+    }
+  }
+}

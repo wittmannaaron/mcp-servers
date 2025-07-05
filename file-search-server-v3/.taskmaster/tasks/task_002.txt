@@ -1,0 +1,11 @@
+# Task ID: 2
+# Title: Implement Context-Aware Chunking Service
+# Status: pending
+# Dependencies: None
+# Priority: high
+# Description: Create a new service that can split Markdown text into chunks based on semantic boundaries.
+# Details:
+The service will have a function 'chunk_text' that takes Markdown text as input and returns a list of chunks.
+
+# Test Strategy:
+Test the function with different Markdown texts to ensure it works correctly.

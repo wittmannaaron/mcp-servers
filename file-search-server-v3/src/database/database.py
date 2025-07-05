@@ -57,6 +57,154 @@ class DocumentStore:
                         file_references, tokenize='unicode61'
                     )
                 """)
+                await client.create_table("""
+                    CREATE TABLE IF NOT EXISTS chunks (
+                        id INTEGER PRIMARY KEY,
+                        document_id INTEGER NOT NULL,
+                        chunk_index INTEGER NOT NULL,
+                        content TEXT NOT NULL,
+                        char_count INTEGER NOT NULL,
+                        FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE
+                    )
+                """)
+                # Use regular table with JSON storage instead of VSS extension
+                await client.create_table("""
+                    CREATE TABLE IF NOT EXISTS chunk_vectors (
+                        id INTEGER PRIMARY KEY,
+                        chunk_id INTEGER NOT NULL,
+                        embedding_json TEXT NOT NULL,
+                        FOREIGN KEY (chunk_id) REFERENCES chunks(id) ON DELETE CASCADE
+                    )
+                """)
+                
+                # Create fuzzy search tables for persons and places
+                await client.create_table("""
+                    CREATE TABLE IF NOT EXISTS persons_fuzzy (
+                        id INTEGER PRIMARY KEY,
+                        document_id INTEGER NOT NULL,
+                        original_name TEXT NOT NULL,
+                        soundex_code TEXT NOT NULL,
+                        normalized_name TEXT NOT NULL,
+                        FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE
+                    )
+                """)
+                
+                await client.create_table("""
+                    CREATE TABLE IF NOT EXISTS places_fuzzy (
+                        id INTEGER PRIMARY KEY,
+                        document_id INTEGER NOT NULL,
+                        original_place TEXT NOT NULL,
+                        soundex_code TEXT NOT NULL,
+                        normalized_place TEXT NOT NULL,
+                        FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE
+                    )
+                """)
+                
+                # Create indexes for fuzzy search performance
+                await client.create_table("""
+                    CREATE INDEX IF NOT EXISTS idx_persons_soundex ON persons_fuzzy(soundex_code)
+                """)
+                await client.create_table("""
+                    CREATE INDEX IF NOT EXISTS idx_persons_normalized ON persons_fuzzy(normalized_name)
+                """)
+                await client.create_table("""
+                    CREATE INDEX IF NOT EXISTS idx_places_soundex ON places_fuzzy(soundex_code)
+                """)
+                await client.create_table("""
+                    CREATE INDEX IF NOT EXISTS idx_places_normalized ON places_fuzzy(normalized_place)
+                """)
+                
+                # Create triggers to populate fuzzy tables automatically
+                await client.create_table("""
+                    CREATE TRIGGER IF NOT EXISTS populate_persons_fuzzy
+                    AFTER INSERT ON documents
+                    WHEN NEW.persons IS NOT NULL AND NEW.persons != ''
+                    BEGIN
+                        INSERT INTO persons_fuzzy (document_id, original_name, soundex_code, normalized_name)
+                        SELECT NEW.id,
+                               json_each.value,
+                               CASE
+                                   WHEN length(json_each.value) > 0 THEN
+                                       substr(upper(json_each.value), 1, 1) ||
+                                       substr('000' || replace(replace(replace(replace(replace(replace(replace(replace(replace(
+                                           upper(json_each.value), 'A', ''), 'E', ''), 'I', ''), 'O', ''), 'U', ''), 'H', ''), 'W', ''), 'Y', ''),
+                                           'BFPV', '1'), 1, 3)
+                                   ELSE ''
+                               END,
+                               lower(trim(json_each.value))
+                        FROM json_each(NEW.persons)
+                        WHERE json_each.value IS NOT NULL AND trim(json_each.value) != '';
+                    END
+                """)
+                
+                await client.create_table("""
+                    CREATE TRIGGER IF NOT EXISTS populate_places_fuzzy
+                    AFTER INSERT ON documents
+                    WHEN NEW.places IS NOT NULL AND NEW.places != ''
+                    BEGIN
+                        INSERT INTO places_fuzzy (document_id, original_place, soundex_code, normalized_place)
+                        SELECT NEW.id,
+                               json_each.value,
+                               CASE
+                                   WHEN length(json_each.value) > 0 THEN
+                                       substr(upper(json_each.value), 1, 1) ||
+                                       substr('000' || replace(replace(replace(replace(replace(replace(replace(replace(replace(
+                                           upper(json_each.value), 'A', ''), 'E', ''), 'I', ''), 'O', ''), 'U', ''), 'H', ''), 'W', ''), 'Y', ''),
+                                           'BFPV', '1'), 1, 3)
+                                   ELSE ''
+                               END,
+                               lower(trim(json_each.value))
+                        FROM json_each(NEW.places)
+                        WHERE json_each.value IS NOT NULL AND trim(json_each.value) != '';
+                    END
+                """)
+                
+                # Create triggers for updates
+                await client.create_table("""
+                    CREATE TRIGGER IF NOT EXISTS update_persons_fuzzy
+                    AFTER UPDATE ON documents
+                    WHEN NEW.persons != OLD.persons
+                    BEGIN
+                        DELETE FROM persons_fuzzy WHERE document_id = NEW.id;
+                        INSERT INTO persons_fuzzy (document_id, original_name, soundex_code, normalized_name)
+                        SELECT NEW.id,
+                               json_each.value,
+                               CASE
+                                   WHEN length(json_each.value) > 0 THEN
+                                       substr(upper(json_each.value), 1, 1) ||
+                                       substr('000' || replace(replace(replace(replace(replace(replace(replace(replace(replace(
+                                           upper(json_each.value), 'A', ''), 'E', ''), 'I', ''), 'O', ''), 'U', ''), 'H', ''), 'W', ''), 'Y', ''),
+                                           'BFPV', '1'), 1, 3)
+                                   ELSE ''
+                               END,
+                               lower(trim(json_each.value))
+                        FROM json_each(NEW.persons)
+                        WHERE json_each.value IS NOT NULL AND trim(json_each.value) != '' AND NEW.persons IS NOT NULL AND NEW.persons != '';
+                    END
+                """)
+                
+                await client.create_table("""
+                    CREATE TRIGGER IF NOT EXISTS update_places_fuzzy
+                    AFTER UPDATE ON documents
+                    WHEN NEW.places != OLD.places
+                    BEGIN
+                        DELETE FROM places_fuzzy WHERE document_id = NEW.id;
+                        INSERT INTO places_fuzzy (document_id, original_place, soundex_code, normalized_place)
+                        SELECT NEW.id,
+                               json_each.value,
+                               CASE
+                                   WHEN length(json_each.value) > 0 THEN
+                                       substr(upper(json_each.value), 1, 1) ||
+                                       substr('000' || replace(replace(replace(replace(replace(replace(replace(replace(replace(
+                                           upper(json_each.value), 'A', ''), 'E', ''), 'I', ''), 'O', ''), 'U', ''), 'H', ''), 'W', ''), 'Y', ''),
+                                           'BFPV', '1'), 1, 3)
+                                   ELSE ''
+                               END,
+                               lower(trim(json_each.value))
+                        FROM json_each(NEW.places)
+                        WHERE json_each.value IS NOT NULL AND trim(json_each.value) != '' AND NEW.places IS NOT NULL AND NEW.places != '';
+                    END
+                """)
                 self._initialized = True
                 logger.debug("Database schema initialized through MCP")
         except Exception as e:
@@ -113,6 +261,42 @@ class DocumentStore:
             logger.error(f"Failed to store document via MCP: {e}")
             raise
 
+    async def store_chunks_and_embeddings(self, doc_id: int, chunks: List[str], embeddings: List[List[float]]):
+        """Stores chunks and their embeddings in the database in a single transaction."""
+        await self._ensure_initialized()
+        if len(chunks) != len(embeddings):
+            raise ValueError("The number of chunks and embeddings must be equal.")
+
+        try:
+            async with get_mcp_client(self.db_path) as client:
+                for i, (chunk_content, embedding) in enumerate(zip(chunks, embeddings)):
+                    # Insert chunk first
+                    chunk_query = "INSERT INTO chunks (document_id, chunk_index, content, char_count) VALUES (?, ?, ?, ?)"
+                    chunk_params = [doc_id, i, chunk_content, len(chunk_content)]
+                    await client.write_query(chunk_query, chunk_params)
+                    
+                    # Get the chunk ID by querying for the specific chunk we just inserted
+                    chunk_id_query = "SELECT id FROM chunks WHERE document_id = ? AND chunk_index = ?"
+                    chunk_id_result = await client.read_query(chunk_id_query, [doc_id, i])
+                    
+                    if not chunk_id_result:
+                        logger.error(f"Failed to retrieve chunk ID for document {doc_id}, chunk {i}")
+                        continue
+                        
+                    chunk_id = chunk_id_result[0]['id']
+                    
+                    # Insert the embedding into the JSON table
+                    vector_query = "INSERT INTO chunk_vectors (chunk_id, embedding_json) VALUES (?, ?)"
+                    embedding_json = json.dumps(embedding)
+                    vector_params = [chunk_id, embedding_json]
+                    
+                    await client.write_query(vector_query, vector_params)
+                
+                logger.debug(f"Stored {len(chunks)} chunks and embeddings for document ID {doc_id}")
+        except Exception as e:
+            logger.error(f"Failed to store chunks and embeddings for document ID {doc_id}: {e}")
+            raise
+ 
     def get_document_by_path(self, file_path: str) -> Optional[Dict[str, Any]]:
         """Get document by path using MCP read operations."""
         return asyncio.run(self._get_document_by_path_async(file_path))
@@ -182,6 +366,76 @@ class DocumentStore:
             logger.error(f"Failed to search documents via MCP: {e}")
             return []
 
+    async def search_semantic(self, query_text: str, limit: int = 10) -> List[Dict[str, Any]]:
+        """Performs semantic search for a given query text using JSON-stored vectors."""
+        await self._ensure_initialized()
+        logger.debug(f"Performing semantic search for: '{query_text}'")
+
+        try:
+            # 1. Generate an embedding for the query text
+            from src.core.embedding_service import create_embeddings
+            query_embedding = create_embeddings([query_text])[0]
+
+            # 2. Retrieve all stored embeddings and calculate similarities
+            async with get_mcp_client(self.db_path) as client:
+                search_query = """
+                    SELECT
+                        cv.embedding_json,
+                        c.id as chunk_id,
+                        c.content,
+                        d.id as document_id,
+                        d.file_path,
+                        d.filename
+                    FROM chunk_vectors cv
+                    JOIN chunks c ON cv.chunk_id = c.id
+                    JOIN documents d ON c.document_id = d.id
+                """
+                results = await client.read_query(search_query)
+                
+                if not results:
+                    return []
+
+                # 3. Calculate cosine similarities in Python
+                similarities = []
+                for row in results:
+                    try:
+                        stored_embedding = json.loads(row['embedding_json'])
+                        similarity = self._cosine_similarity(query_embedding, stored_embedding)
+                        similarities.append({
+                            'chunk_id': row['chunk_id'],
+                            'content': row['content'],
+                            'document_id': row['document_id'],
+                            'file_path': row['file_path'],
+                            'filename': row['filename'],
+                            'similarity': similarity
+                        })
+                    except (json.JSONDecodeError, KeyError) as e:
+                        logger.warning(f"Skipping malformed embedding data: {e}")
+                        continue
+
+                # 4. Sort by similarity and return top results
+                similarities.sort(key=lambda x: x['similarity'], reverse=True)
+                return similarities[:limit]
+
+        except Exception as e:
+            logger.error(f"Semantic search failed: {e}")
+            return []
+
+    def _cosine_similarity(self, vec1: List[float], vec2: List[float]) -> float:
+        """Calculate cosine similarity between two vectors."""
+        try:
+            import numpy as np
+            a, b = np.array(vec1), np.array(vec2)
+            return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))
+        except ImportError:
+            # Fallback implementation without numpy
+            dot_product = sum(a * b for a, b in zip(vec1, vec2))
+            magnitude_a = sum(a * a for a in vec1) ** 0.5
+            magnitude_b = sum(b * b for b in vec2) ** 0.5
+            if magnitude_a == 0 or magnitude_b == 0:
+                return 0.0
+            return dot_product / (magnitude_a * magnitude_b)
+ 
     def close(self):
         """Close MCP client connections."""
         pass  # MCP client cleanup is handled globally

@@ -1,0 +1,11 @@
+# Task ID: 8
+# Title: Write Unit Tests for Embedding Service
+# Status: pending
+# Dependencies: 3
+# Priority: medium
+# Description: Write unit tests for the embedding service to ensure it works correctly.
+# Details:
+The tests will cover different scenarios and edge cases.
+
+# Test Strategy:
+Run the tests and verify that they pass.

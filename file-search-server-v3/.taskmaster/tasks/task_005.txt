@@ -1,0 +1,11 @@
+# Task ID: 5
+# Title: Create Vector Table for Similarity Search
+# Status: pending
+# Dependencies: None
+# Priority: high
+# Description: Create a new virtual table 'chunk_vectors' to store vector embeddings for similarity search.
+# Details:
+The table will be used to store embeddings for chunks and perform similarity searches.
+
+# Test Strategy:
+Verify that the table is created successfully and can store data.

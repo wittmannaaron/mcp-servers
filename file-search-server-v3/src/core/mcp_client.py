@@ -102,17 +102,46 @@ class MCPClientManager:
             logger.error(f"Error during MCP cleanup: {e}")
 
     def _format_query(self, query: str, params: Optional[List] = None) -> str:
-        """Format query with parameters."""
+        """Format query with parameters for MCP SQLite server using safe parameter substitution."""
         if not params:
             return query
+        
+        # Use a unique placeholder that won't appear in data content
+        import uuid
+        temp_placeholders = []
+        
+        # Replace each ? with a unique temporary placeholder
         formatted_query = query
-        for param in params:
+        for i in range(len(params)):
+            temp_placeholder = f"__PARAM_{uuid.uuid4().hex}__"
+            temp_placeholders.append(temp_placeholder)
+            formatted_query = formatted_query.replace('?', temp_placeholder, 1)
+        
+        # Verify we replaced the right number of placeholders
+        remaining_placeholders = formatted_query.count('?')
+        if remaining_placeholders > 0:
+            raise ValueError(f"Parameter count mismatch: query has {remaining_placeholders} unreplaced placeholders after substitution")
+        
+        # Now safely replace temporary placeholders with actual values
+        for i, param in enumerate(params):
+            temp_placeholder = temp_placeholders[i]
+            
             if param is None:
-                formatted_query = formatted_query.replace('?', 'NULL', 1)
+                replacement = 'NULL'
+            elif isinstance(param, (int, float)):
+                # Don't quote numeric values
+                replacement = str(param)
+            elif isinstance(param, bool):
+                # Handle boolean values
+                replacement = '1' if param else '0'
             else:
-                # Properly escape single quotes in parameters
+                # Properly escape string parameters for SQLite
+                # Replace single quotes with double single quotes and wrap in quotes
                 escaped_param = str(param).replace("'", "''")
-                formatted_query = formatted_query.replace('?', f"'{escaped_param}'", 1)
+                replacement = f"'{escaped_param}'"
+            
+            formatted_query = formatted_query.replace(temp_placeholder, replacement)
+        
         return formatted_query
 
     def _parse_result(self, result) -> Any:
@@ -137,6 +166,10 @@ class MCPClientManager:
             result = await self.session.call_tool("read_query", {"query": formatted_query})
             return self._parse_result(result)
         except Exception as e:
+            # Suppress expected "Only SELECT queries are allowed" errors for INSERT with RETURNING
+            if "Only SELECT queries are allowed" in str(e):
+                logger.debug(f"Expected read_query restriction for non-SELECT: {query[:50]}...")
+                raise
             logger.error(f"MCP read_query failed: {e}")
             raise
 
@@ -144,11 +177,15 @@ class MCPClientManager:
         """Execute INSERT/UPDATE/DELETE query using MCP write_query tool."""
         try:
             formatted_query = self._format_query(query, params)
+            logger.debug(f"Executing write query: {formatted_query[:100]}...")
             result = await self.session.call_tool("write_query", {"query": formatted_query})
             parsed = self._parse_result(result)
             return parsed if isinstance(parsed, dict) else {"affected_rows": 0}
         except Exception as e:
             logger.error(f"MCP write_query failed: {e}")
+            logger.error(f"Query: {query}")
+            logger.error(f"Params: {params}")
+            logger.error(f"Formatted query: {self._format_query(query, params) if params else 'N/A'}")
             raise
 
     async def list_tables(self) -> List[str]:

@@ -1,0 +1,11 @@
+# Task ID: 15
+# Title: Implement Semantic Search API
+# Status: pending
+# Dependencies: 13, 14
+# Priority: high
+# Description: Implement a new API method 'search_semantic' to perform semantic searches
+# Details:
+Add a new method 'search_semantic' to the 'DocumentStore' class in 'src/database/database.py'. This method should take a query string, generate an embedding for it using the Embedding Service, and then perform a vector similarity search against the 'chunk_vectors' table to find the most relevant chunks. The results should be returned in a clear and usable format. Expose this new search functionality via an endpoint in the API ('src/api/main.py').
+
+# Test Strategy:
+Test the 'search_semantic' method with different query strings to ensure it works correctly. Verify that the method returns relevant results and handles edge cases such as empty query strings or queries with special characters.

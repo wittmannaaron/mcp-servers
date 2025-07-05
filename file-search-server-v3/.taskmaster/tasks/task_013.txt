@@ -1,0 +1,11 @@
+# Task ID: 13
+# Title: Implement Embedding Service
+# Status: pending
+# Dependencies: 2, 4
+# Priority: high
+# Description: Create a new service that can create embeddings for text chunks.
+# Details:
+Implement a new module at 'src/core/embedding_service.py' that provides a function 'create_embeddings' to take a list of texts and return their vector embeddings. The function should support batching to process multiple texts efficiently in a single call. The service will utilize the llama3.2 model for embedding generation.
+
+# Test Strategy:
+Test the 'create_embeddings' function with different inputs to ensure it works correctly. Verify that the function handles edge cases such as empty input, single text, and multiple texts. Test the performance of the function with large inputs.

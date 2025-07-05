@@ -10,7 +10,9 @@ from src.extractors.docling_extractor import extract_and_preprocess
 from src.extractors.email_extractor import extract_email_data
 from src.extractors.zip_extractor import extract_zip_data
 from src.core.ingestion_mcp_client import IngestionMCPClient
-
+from src.core.chunking_service import chunk_text
+from src.core.embedding_service import create_embeddings
+ 
 class IngestionOrchestrator:
     """Orchestrates the file ingestion process using MCP architecture."""
 
@@ -136,6 +138,8 @@ class IngestionOrchestrator:
 
             if doc_id:
                 logger.info(f"Successfully ingested and stored {file_path} with document ID {doc_id}")
+                # Now, chunk and embed the content
+                await self._process_and_store_chunks(doc_id, doc_data['markdown_content'])
                 return doc_id
             else:
                 logger.warning(f"Document stored but could not retrieve ID for {file_path}")
@@ -145,6 +149,33 @@ class IngestionOrchestrator:
             logger.error(f"Failed to process file {file_path}: {e}")
             return None
 
+    async def _process_and_store_chunks(self, doc_id: int, markdown_content: str):
+        """Chunk content, create embeddings, and store them."""
+        try:
+            logger.debug(f"Starting chunking and embedding for document ID {doc_id}")
+            
+            # 1. Chunk the document content
+            chunks = chunk_text(markdown_content)
+            if not chunks:
+                logger.debug(f"No chunks generated for document ID {doc_id}")
+                return
+
+            logger.info(f"Generated {len(chunks)} chunks for document ID {doc_id}")
+
+            # 2. Generate embeddings for the chunks
+            embeddings = create_embeddings(chunks)
+            if not embeddings or len(chunks) != len(embeddings):
+                logger.error(f"Mismatch between chunks and embeddings count for document ID {doc_id}")
+                return
+
+            # 3. Store chunks and embeddings in the database
+            await self.document_store.store_chunks_and_embeddings(doc_id, chunks, embeddings)
+
+            logger.info(f"Successfully stored {len(chunks)} chunks and embeddings for document ID {doc_id}")
+
+        except Exception as e:
+            logger.error(f"Failed to process chunks and embeddings for document ID {doc_id}: {e}")
+ 
     def _handle_delete(self, file_path: Path):
         """Handles deletion of a file."""
         try:

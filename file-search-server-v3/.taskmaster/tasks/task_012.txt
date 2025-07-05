@@ -1,0 +1,11 @@
+# Task ID: 12
+# Title: Implement Context-Aware Chunking Service
+# Status: pending
+# Dependencies: 1
+# Priority: high
+# Description: Create a new service that can split Markdown text into chunks based on semantic boundaries.
+# Details:
+Implement a function 'chunk_text' in a new module 'src/core/chunking_service.py' that takes Markdown text as input and returns a list of chunks. The function should prioritize splitting along headers, paragraphs, lists, and code blocks to maintain context within each chunk.
+
+# Test Strategy:
+Test the function with different Markdown texts to ensure it works correctly. Verify that the function handles edge cases such as empty input, single-line text, and text with multiple consecutive headers.

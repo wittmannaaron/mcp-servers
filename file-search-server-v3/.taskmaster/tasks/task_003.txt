@@ -1,0 +1,11 @@
+# Task ID: 3
+# Title: Create Embedding Service
+# Status: pending
+# Dependencies: None
+# Priority: high
+# Description: Create a new service that can create embeddings for text chunks.
+# Details:
+The service will have a function 'create_embeddings' that takes a list of texts and returns a list of embeddings.
+
+# Test Strategy:
+Test the function with different texts to ensure it works correctly.

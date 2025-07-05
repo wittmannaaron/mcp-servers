@@ -1,0 +1,11 @@
+# Task ID: 1
+# Title: Create Chunks Table in Database
+# Status: pending
+# Dependencies: None
+# Priority: high
+# Description: Create a new table 'chunks' in the database to store text chunks derived from documents.
+# Details:
+The table will have the following columns: id (INTEGER, PRIMARY KEY), document_id (INTEGER, FOREIGN KEY to documents.id), chunk_index (INTEGER), content (TEXT), and char_count (INTEGER).
+
+# Test Strategy:
+Verify that the table is created successfully and can store data.

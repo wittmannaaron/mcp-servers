@@ -1,0 +1,11 @@
+# Task ID: 6
+# Title: Implement Semantic Search API
+# Status: pending
+# Dependencies: 4, 5
+# Priority: high
+# Description: Create a new API method 'search_semantic' to perform semantic searches.
+# Details:
+The method will take a query text and return a list of relevant documents or chunks.
+
+# Test Strategy:
+Test the method with different query texts to ensure it works correctly.
