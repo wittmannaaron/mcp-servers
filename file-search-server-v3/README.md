@@ -149,14 +149,27 @@ Automatisches Filtern von System-Dateien:
 
 ## 🔗 MCP Integration
 
-Dieser Server ist für die Zusammenarbeit mit MCP (Model Context Protocol) Servern konzipiert:
+Dieser Server ist für die Zusammenarbeit mit MCP (Model Context Protocol) Servern konzipiert und enthält einen integrierten SQLite MCP Server:
 
 ```
-mcp-servers/
-├── file-search-server-v3/     ← Dieser Server
-├── src/sqlite/                ← SQLite MCP Server
+file-search-server-v3/
+├── src/core/                  ← Kern-Funktionalitäten
+│   ├── document_store.py      ← Dokumentenverwaltung
+│   ├── mcp_client.py          ← MCP Client Integration
+│   └── ...
+├── src/sqlite/                ← Integrierter SQLite MCP Server
+│   ├── src/mcp_server_sqlite/ ← MCP Server Implementation
+│   └── pyproject.toml         ← Server Dependencies
+├── data/                      ← Zentrale Datenspeicherung
+│   └── filebrowser.db         ← SQLite Datenbank
 └── ...
 ```
+
+### Konsolidierte Architektur
+- **Einheitliche Projektstruktur** - Alle Komponenten in einem Verzeichnis
+- **Zentrale Datenspeicherung** - Datenbank im `data/` Verzeichnis
+- **Integrierter MCP Server** - SQLite Server direkt im Projekt enthalten
+- **Vereinfachte Konfiguration** - Konsistente Pfade in allen Komponenten
 
 ## 📈 Performance
 
