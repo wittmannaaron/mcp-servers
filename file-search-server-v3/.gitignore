@@ -59,6 +59,7 @@ ENV/
 *.db
 *.db-shm
 *.db-wal
+data/filebrowser.db
 
 # Test
 .pytest_cache/

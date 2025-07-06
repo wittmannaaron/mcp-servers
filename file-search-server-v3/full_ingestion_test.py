@@ -3,6 +3,7 @@
 Comprehensive test script for the document ingestion pipeline.
 """
 
+import argparse
 import asyncio
 import sys
 import time
@@ -67,10 +68,13 @@ def is_hidden_file(file_path: Path) -> bool:
     
     return False
 
-async def run_ingestion_test():
+async def run_ingestion_test(max_files=None):
     """
-    Runs the full ingestion test, processing all files in the specified
+    Runs the full ingestion test, processing files in the specified
     directory and reporting on the results.
+    
+    Args:
+        max_files: Maximum number of files to process (None for all files)
     """
     # Setup global logging configuration first
     setup_logging()
@@ -87,6 +91,12 @@ async def run_ingestion_test():
 
     # Filter out hidden files and system files
     all_files = [f for f in test_dir.iterdir() if f.is_file() and not is_hidden_file(f)]
+    
+    # Limit files if max_files is specified
+    if max_files is not None and max_files > 0:
+        all_files = all_files[:max_files]
+        logger.info(f"Limited to first {max_files} files for testing")
+    
     total_files = len(all_files)
     logger.info(f"Found {total_files} files to process in {test_dir} (hidden files filtered out)")
 
@@ -181,12 +191,24 @@ async def verify_database():
 
 async def main():
     """Main function that runs the test and verifies the database."""
-    # Clear the database before starting the test
-    logger.info("Clearing database for a fresh test run...")
-    clear_database_file()
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Run document ingestion test')
+    parser.add_argument('-c', '--count', type=int, default=None,
+                       help='Maximum number of files to process (default: all files)')
+    parser.add_argument('--no-clear', action='store_true',
+                       help='Do not clear database before test (useful for incremental testing)')
+    
+    args = parser.parse_args()
+    
+    # Clear the database before starting the test (unless --no-clear is specified)
+    if not args.no_clear:
+        logger.info("Clearing database for a fresh test run...")
+        clear_database_file()
+    else:
+        logger.info("Skipping database clear (--no-clear specified)")
 
     # Run the ingestion test
-    success = await run_ingestion_test()
+    success = await run_ingestion_test(max_files=args.count)
     
     if success:
         # Verify database contents
