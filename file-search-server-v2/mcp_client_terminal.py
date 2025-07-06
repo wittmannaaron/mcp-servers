@@ -325,31 +325,30 @@ class MCPClientTerminal:
         body {{
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
             margin: 0;
-            padding: 20px;
+            padding: 0;
             background-color: #f8f9fa;
             line-height: 1.5;
+            min-height: 100%;
+            overflow-y: auto;
         }}
         .container {{
             max-width: 900px;
-            margin: 0 auto;
+            margin: 20px auto;
             background-color: white;
             border-radius: 12px;
             box-shadow: 0 4px 6px rgba(0,0,0,0.07);
             overflow: hidden;
+            min-height: calc(100% - 40px);
         }}
         .header {{
             background: linear-gradient(135deg, #007acc 0%, #005c99 100%);
             color: white;
-            padding: 25px;
+            padding: 8px 20px;
         }}
         .header h1 {{
-            margin: 0 0 10px 0;
-            font-size: 24px;
+            margin: 0;
+            font-size: 16px;
             font-weight: 600;
-        }}
-        .search-info {{
-            font-size: 14px;
-            opacity: 0.9;
         }}
         table {{
             width: 100%;
@@ -369,6 +368,14 @@ class MCPClientTerminal:
             font-weight: 600;
             color: #007acc;
             font-size: 16px;
+            text-decoration: none;
+            cursor: pointer;
+        }}
+        .result-header .filename:hover {{
+            text-decoration: underline;
+            background-color: rgba(0, 122, 204, 0.1);
+            padding: 2px 4px;
+            border-radius: 4px;
         }}
         .result-filepath {{
             background-color: #f8f9fa;
@@ -421,29 +428,92 @@ class MCPClientTerminal:
         }}
     </style>
     <script>
-        // Function to open files - will work in WebKit app with proper configuration
+        // Function to open files - supports both WebKit app and browser fallback
         function openFile(filePath) {{
-            // Try file:// protocol first (works in some WebKit configurations)
-            const fileUrl = 'file://' + filePath;
-            
-            // Try to open with window.open
-            const newWindow = window.open(fileUrl, '_blank');
-            
-            // If that fails, try alternative approaches
-            if (!newWindow || newWindow.closed || typeof newWindow.closed === 'undefined') {{
-                // For WebKit apps, you can expose a native function like:
-                // window.webkit?.messageHandlers?.fileHandler?.postMessage(filePath);
-                
-                // Fallback: copy path to clipboard
-                if (navigator.clipboard) {{
-                    navigator.clipboard.writeText(filePath).then(() => {{
-                        alert('Dateipfad wurde in die Zwischenablage kopiert:\\n' + filePath);
-                    }}).catch(() => {{
-                        // Fallback for older browsers
+            // Check if we're in an iframe (results are displayed in iframe)
+            if (window.parent && window.parent !== window) {{
+                // We're in an iframe, call parent window's API
+                if (window.parent.openFileNatively) {{
+                    window.parent.openFileNatively(filePath);
+                }} else {{
+                    // Fallback for iframe in browser
+                    if (navigator.clipboard) {{
+                        navigator.clipboard.writeText(filePath).then(() => {{
+                            alert('Dateipfad wurde in die Zwischenablage kopiert:\\n' + filePath);
+                        }}).catch(() => {{
+                            prompt('Dateipfad (Kopieren mit Cmd+C):', filePath);
+                        }});
+                    }} else {{
                         prompt('Dateipfad (Kopieren mit Cmd+C):', filePath);
+                    }}
+                }}
+            }} else {{
+                // We're in the main window
+                if (typeof pywebview !== 'undefined' && pywebview.api && pywebview.api.open_file_natively) {{
+                    // Use native API for WebKit app
+                    pywebview.api.open_file_natively(filePath).then(function(result) {{
+                        if (!result.success) {{
+                            alert('Fehler beim Öffnen der Datei: ' + result.message);
+                        }}
+                    }}).catch(function(error) {{
+                        alert('Fehler beim Öffnen der Datei: ' + error);
                     }});
                 }} else {{
-                    prompt('Dateipfad (Kopieren mit Cmd+C):', filePath);
+                    // Fallback for browser version
+                    if (navigator.clipboard) {{
+                        navigator.clipboard.writeText(filePath).then(() => {{
+                            alert('Dateipfad wurde in die Zwischenablage kopiert:\\n' + filePath);
+                        }}).catch(() => {{
+                            prompt('Dateipfad (Kopieren mit Cmd+C):', filePath);
+                        }});
+                    }} else {{
+                        prompt('Dateipfad (Kopieren mit Cmd+C):', filePath);
+                    }}
+                }}
+            }}
+        }}
+        
+        // Function to open folder in Finder - supports both WebKit app and browser fallback
+        function openFolder(filePath) {{
+            // Check if we're in an iframe (results are displayed in iframe)
+            if (window.parent && window.parent !== window) {{
+                // We're in an iframe, call parent window's API
+                if (window.parent.openFolderInFinder) {{
+                    window.parent.openFolderInFinder(filePath);
+                }} else {{
+                    // Fallback for iframe in browser
+                    if (navigator.clipboard) {{
+                        navigator.clipboard.writeText(filePath).then(() => {{
+                            alert('Dateipfad wurde in die Zwischenablage kopiert:\\n' + filePath);
+                        }}).catch(() => {{
+                            prompt('Dateipfad (Kopieren mit Cmd+C):', filePath);
+                        }});
+                    }} else {{
+                        prompt('Dateipfad (Kopieren mit Cmd+C):', filePath);
+                    }}
+                }}
+            }} else {{
+                // We're in the main window
+                if (typeof pywebview !== 'undefined' && pywebview.api && pywebview.api.open_folder_in_finder) {{
+                    // Use native API for WebKit app
+                    pywebview.api.open_folder_in_finder(filePath).then(function(result) {{
+                        if (!result.success) {{
+                            alert('Fehler beim Öffnen des Ordners: ' + result.message);
+                        }}
+                    }}).catch(function(error) {{
+                        alert('Fehler beim Öffnen des Ordners: ' + error);
+                    }});
+                }} else {{
+                    // Fallback for browser version
+                    if (navigator.clipboard) {{
+                        navigator.clipboard.writeText(filePath).then(() => {{
+                            alert('Dateipfad wurde in die Zwischenablage kopiert:\\n' + filePath);
+                        }}).catch(() => {{
+                            prompt('Dateipfad (Kopieren mit Cmd+C):', filePath);
+                        }});
+                    }} else {{
+                        prompt('Dateipfad (Kopieren mit Cmd+C):', filePath);
+                    }}
                 }}
             }}
         }}
@@ -457,18 +527,11 @@ class MCPClientTerminal:
 <body>
     <div class="container">
         <div class="header">
-            <h1>📋 Suchergebnisse</h1>
-            <div class="search-info">
-                <strong>Suchbegriffe:</strong> {search_terms} • 
-                <strong>Ergebnisse:</strong> {result_count}
-            </div>
+            <h1>Search results</h1>
         </div>
         
         <table>
 {table_rows}
-            <tr class="separator">
-                <td></td>
-            </tr>
         </table>
         
         <div class="timestamp">
@@ -503,11 +566,11 @@ class MCPClientTerminal:
             <tr class="result-header">
                 <td>
                     <span class="date">{formatted_date}</span>
-                    <span class="filename">{filename}</span>
+                    <a href="#" onclick="openFile('{escaped_path}'); return false;" class="filename">{filename}</a>
                 </td>
             </tr>
             <tr class="result-filepath">
-                <td><a href="#" onclick="openFile('{escaped_path}')" class="filepath">{file_path}</a></td>
+                <td><a href="#" onclick="openFolder('{escaped_path}'); return false;" class="filepath">{file_path}</a></td>
             </tr>
             <tr class="result-content">
                 <td><div class="content">{processed_content}</div></td>

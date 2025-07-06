@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     log_file_retention: str = "10 days"
 
     # MCP Client Configuration (stdio-based)
-    mcp_db_path: str = "src/database/filebrowser.db"
+    mcp_db_path: str = "data/filebrowser.db"
     mcp_server_directory: str = "docs/MCP-Servers-src/sqlite_MCP_Server"
 
     # LLM Configuration

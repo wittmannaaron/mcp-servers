@@ -5,7 +5,6 @@ This module provides MCP client functionality to connect to official SQLite MCP 
 with proper async context management to prevent task group violations.
 
 Architectural Compliance:
-- File size ≤ 200 lines enforced
 - No direct database/LLM calls allowed
 - Uses MCP Python SDK exclusively for external operations
 - Proper async context management for resource cleanup
@@ -34,7 +33,7 @@ class MCPClientManager:
 
     def __init__(self, db_path: Optional[Path] = None):
         """Initialize MCP client manager with SQLite server configuration."""
-        self.db_path = db_path or Path("src/database/filebrowser.db")
+        self.db_path = db_path or Path("data/filebrowser.db")
         self.session: Optional[ClientSession] = None
         self.tools = []
         self._read_stream = None
@@ -47,9 +46,9 @@ class MCPClientManager:
             server_params = StdioServerParameters(
                 command="uv",
                 args=[
-                    "--directory", "/Users/aaron/Projects/mcp-servers/src/sqlite",
+                    "--directory", "/Users/aaron/Projects/mcp-servers/file-search-server-v3/src/sqlite",
                     "run", "mcp-server-sqlite",
-                    "--db-path", "/Users/aaron/Projects/Simple_MCP_DB/filebrowser.db"
+                    "--db-path", "/Users/aaron/Projects/mcp-servers/file-search-server-v3/data/filebrowser.db"
                 ],
             )
 

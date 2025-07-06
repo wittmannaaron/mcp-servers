@@ -15,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 from src.core.ingestion import IngestionOrchestrator
 from src.core.events import FileEvent, FileEventType
-from src.database.database import DocumentStore
+from src.core.document_store import DocumentStore
 from src.core.mcp_client import get_mcp_client
 from src.core.logging_config import setup_logging
 from clear_database import clear_database_file

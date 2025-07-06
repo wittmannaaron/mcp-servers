@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 from loguru import logger
 
-DB_FILE = Path(__file__).parent / "src" / "database" / "filebrowser.db"
+DB_FILE = Path(__file__).parent / "data" / "filebrowser.db"
 
 def clear_database_file():
     """Deletes the SQLite database file if it exists."""

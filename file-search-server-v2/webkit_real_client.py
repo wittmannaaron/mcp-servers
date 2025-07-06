@@ -4,6 +4,7 @@ Real WebKit Client - Connects to actual MCP server and shows HTML output
 """
 
 import webview
+import subprocess
 from pathlib import Path
 from mcp_client_terminal import MCPClientTerminal
 
@@ -11,6 +12,82 @@ class RealWebKitClient(MCPClientTerminal):
     def __init__(self):
         super().__init__()
         
+    def create_menu(self):
+        """Create standard macOS menu bar with system-localized labels"""
+        from webview import Menu, MenuAction, MenuSeparator
+        
+        return [
+            Menu('File', [
+                MenuAction('Quit', self.quit_app)
+            ]),
+            Menu('Edit', [
+                MenuAction('Copy', self.copy_selection),
+                MenuAction('Paste', self.paste_text),
+                MenuSeparator(),
+                MenuAction('Select All', self.select_all)
+            ])
+        ]
+    
+    def quit_app(self):
+        """Quit the application"""
+        import sys
+        sys.exit(0)
+    
+    def copy_selection(self):
+        """Copy selected text to clipboard (JavaScript-based)"""
+        # This will be handled by JavaScript in the WebView
+        pass
+    
+    def paste_text(self):
+        """Paste text from clipboard (JavaScript-based)"""
+        # This will be handled by JavaScript in the WebView
+        pass
+    
+    def select_all(self):
+        """Select all text (JavaScript-based)"""
+        # This will be handled by JavaScript in the WebView
+        pass
+    
+    def open_file_natively(self, file_path: str) -> dict:
+        """Open file using macOS 'open' command"""
+        try:
+            # Use macOS 'open' command to open file with default application
+            subprocess.run(["open", file_path], check=True)
+            return {
+                "success": True,
+                "message": f"Datei geöffnet: {file_path}"
+            }
+        except subprocess.CalledProcessError as e:
+            return {
+                "success": False,
+                "message": f"Fehler beim Öffnen der Datei: {e}"
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "message": f"Unbekannter Fehler: {e}"
+            }
+    
+    def open_folder_in_finder(self, file_path: str) -> dict:
+        """Open folder containing the file in Finder"""
+        try:
+            # Use macOS 'open' command to reveal file in Finder
+            subprocess.run(["open", "-R", file_path], check=True)
+            return {
+                "success": True,
+                "message": f"Ordner geöffnet: {file_path}"
+            }
+        except subprocess.CalledProcessError as e:
+            return {
+                "success": False,
+                "message": f"Fehler beim Öffnen des Ordners: {e}"
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "message": f"Unbekannter Fehler: {e}"
+            }
+    
     def search_and_get_html(self, query: str) -> dict:
         """Search using real MCP server and return HTML results"""
         print(f"[WEBKIT] Processing real query: {query}")
@@ -60,33 +137,23 @@ class RealWebKitClient(MCPClientTerminal):
         body {
             font-family: -apple-system, BlinkMacSystemFont, sans-serif;
             margin: 0;
-            padding: 20px;
+            padding: 0;
             background: #f5f5f5;
-        }
-        .container {
-            max-width: 1000px;
-            margin: 0 auto;
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            overflow: hidden;
-        }
-        .header {
-            background: linear-gradient(135deg, #007acc 0%, #005c99 100%);
-            color: white;
-            padding: 20px;
-        }
-        .header h1 {
-            margin: 0 0 10px 0;
-            font-size: 24px;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
         }
         .search-container {
-            padding: 20px;
-            border-bottom: 1px solid #eee;
+            padding: 15px 20px;
+            background: white;
+            border-bottom: 1px solid #ddd;
+            flex-shrink: 0;
         }
         .search-box {
             display: flex;
             gap: 10px;
+            max-width: 800px;
+            margin: 0 auto;
         }
         input {
             flex: 1;
@@ -117,8 +184,10 @@ class RealWebKitClient(MCPClientTerminal):
             cursor: not-allowed;
         }
         .results-container {
+            flex: 1;
             padding: 20px;
-            min-height: 400px;
+            overflow: hidden;
+            height: 600px;
         }
         .status {
             text-align: center;
@@ -137,34 +206,39 @@ class RealWebKitClient(MCPClientTerminal):
         }
         iframe {
             width: 100%;
-            height: 600px;
+            height: 570px;
             border: none;
             border-radius: 6px;
+            overflow: hidden;
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>🔍 MCP File Search</h1>
-            <p>Durchsuchen Sie Ihre lokalen Dateien mit echten Daten</p>
+    <div class="search-container">
+        <div class="search-box">
+            <input type="text" id="searchInput" placeholder="z.B. 'Finde Dateien über Familie' oder 'Suche nach BMW'">
+            <button id="searchBtn" onclick="performSearch()">Suchen</button>
         </div>
-        
-        <div class="search-container">
-            <div class="search-box">
-                <input type="text" id="searchInput" placeholder="z.B. 'Finde Dateien über Familie' oder 'Suche nach BMW'">
-                <button id="searchBtn" onclick="performSearch()">Suchen</button>
-            </div>
-        </div>
-        
-        <div class="results-container">
-            <div id="resultsContent" class="status">
-                Bereit für Ihre Suche. Geben Sie einen Suchbegriff ein.
-            </div>
+    </div>
+    
+    <div class="results-container">
+        <div id="resultsContent" class="status">
+            Bereit für Ihre Suche. Geben Sie einen Suchbegriff ein.
         </div>
     </div>
     
     <script>
+        // Function to open files natively via Python API
+        function openFileNatively(filePath) {
+            pywebview.api.open_file_natively(filePath).then(function(result) {
+                if (!result.success) {
+                    alert('Fehler beim Öffnen der Datei: ' + result.message);
+                }
+            }).catch(function(error) {
+                alert('Fehler beim Öffnen der Datei: ' + error);
+            });
+        }
+        
         function performSearch() {
             const input = document.getElementById('searchInput');
             const button = document.getElementById('searchBtn');
@@ -214,6 +288,73 @@ class RealWebKitClient(MCPClientTerminal):
         document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('searchInput').focus();
         });
+        
+        // Add keyboard shortcuts for copy/paste
+        document.addEventListener('keydown', function(e) {
+            // Command+C (Copy)
+            if (e.metaKey && e.key === 'c') {
+                document.execCommand('copy');
+            }
+            // Command+V (Paste) - only in search input
+            else if (e.metaKey && e.key === 'v') {
+                if (e.target.id === 'searchInput') {
+                    // Let default paste behavior work
+                    return true;
+                }
+            }
+            // Command+A (Select All)
+            else if (e.metaKey && e.key === 'a') {
+                document.execCommand('selectAll');
+            }
+        });
+        
+        // Expose file opening function for iframe access
+        window.openFileNatively = function(filePath) {
+            if (typeof pywebview !== 'undefined' && pywebview.api && pywebview.api.open_file_natively) {
+                pywebview.api.open_file_natively(filePath).then(function(result) {
+                    if (!result.success) {
+                        alert('Fehler beim Öffnen der Datei: ' + result.message);
+                    }
+                }).catch(function(error) {
+                    alert('Fehler beim Öffnen der Datei: ' + error);
+                });
+            } else {
+                // Fallback: copy to clipboard
+                if (navigator.clipboard) {
+                    navigator.clipboard.writeText(filePath).then(() => {
+                        alert('Dateipfad wurde in die Zwischenablage kopiert:\\n' + filePath);
+                    }).catch(() => {
+                        prompt('Dateipfad (Kopieren mit Cmd+C):', filePath);
+                    });
+                } else {
+                    prompt('Dateipfad (Kopieren mit Cmd+C):', filePath);
+                }
+            }
+        };
+        
+        // Expose folder opening function for iframe access
+        window.openFolderInFinder = function(filePath) {
+            if (typeof pywebview !== 'undefined' && pywebview.api && pywebview.api.open_folder_in_finder) {
+                pywebview.api.open_folder_in_finder(filePath).then(function(result) {
+                    if (!result.success) {
+                        alert('Fehler beim Öffnen des Ordners: ' + result.message);
+                    }
+                }).catch(function(error) {
+                    alert('Fehler beim Öffnen des Ordners: ' + error);
+                });
+            } else {
+                // Fallback: copy to clipboard
+                if (navigator.clipboard) {
+                    navigator.clipboard.writeText(filePath).then(() => {
+                        alert('Dateipfad wurde in die Zwischenablage kopiert:\\n' + filePath);
+                    }).catch(() => {
+                        prompt('Dateipfad (Kopieren mit Cmd+C):', filePath);
+                    });
+                } else {
+                    prompt('Dateipfad (Kopieren mit Cmd+C):', filePath);
+                }
+            }
+        };
     </script>
 </body>
 </html>"""
@@ -241,7 +382,7 @@ class RealWebKitClient(MCPClientTerminal):
         print("\nStarte WebKit Interface mit echten Daten...")
         
         try:
-            # Create WebKit window
+            # Create WebKit window with menu
             webview.create_window(
                 'MCP File Search - Real Data',
                 html=self.get_html_template(),
@@ -251,7 +392,7 @@ class RealWebKitClient(MCPClientTerminal):
                 min_size=(800, 600)
             )
             
-            # Start the app
+            # Start the app (copy/paste works via JavaScript and default WebKit behavior)
             webview.start(debug=False)
             
         finally:

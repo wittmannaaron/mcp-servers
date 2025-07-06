@@ -56,7 +56,7 @@ async def getData(search_terms: List[str]) -> List[Dict[str, Any]]:
         FROM documents_fts_extended fts
         JOIN documents d ON d.id = fts.id
         WHERE documents_fts_extended MATCH ?
-        LIMIT 5
+        LIMIT 100
         """
         
         cursor.execute(query, [search_query])

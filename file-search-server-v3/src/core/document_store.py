@@ -10,7 +10,7 @@ from typing import Dict, Any, Optional, List
 from loguru import logger
 from src.core.mcp_client import get_mcp_client
 
-DB_FILE = Path(__file__).parent / "filebrowser.db"
+DB_FILE = Path(__file__).parent.parent.parent / "data" / "filebrowser.db"
 
 class DocumentStore:
     """MCP-compliant document store using official SQLite MCP Server with proper async context management."""

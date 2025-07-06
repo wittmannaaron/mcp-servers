@@ -14,7 +14,7 @@ Architectural Compliance:
 
 from typing import List, Dict, Any
 from loguru import logger
-from src.database.database import DocumentStore
+from src.core.document_store import DocumentStore
 
 
 class SearchService:

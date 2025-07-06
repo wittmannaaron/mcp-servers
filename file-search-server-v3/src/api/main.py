@@ -40,7 +40,7 @@ class MCPChatClient:
         try:
             # Path to the SQLite MCP server (absolute path)
             server_script_path = os.path.abspath("docs/MCP-Servers-src/sqlite_MCP_Server/src/mcp_server_sqlite/server.py")
-            database_path = os.path.abspath("src/database/filebrowser.db")
+            database_path = os.path.abspath("data/filebrowser.db")
 
             # Check if server script exists
             if not os.path.exists(server_script_path):

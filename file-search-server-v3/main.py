@@ -4,7 +4,7 @@ from src.core.logging_config import setup_logging
 from src.core.config import settings
 from src.core.file_watcher import FileWatcher
 from src.core.queue_processor import QueueProcessor
-from src.database.database import DocumentStore, initialize_database
+from src.core.document_store import DocumentStore, initialize_database
 from src.core.ingestion import IngestionOrchestrator
 
 def main():

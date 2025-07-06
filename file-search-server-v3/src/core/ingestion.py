@@ -5,7 +5,7 @@ from loguru import logger
 from datetime import datetime
 
 from src.core.events import FileEvent, FileEventType
-from src.database.database import DocumentStore
+from src.core.document_store import DocumentStore
 from src.extractors.docling_extractor import extract_and_preprocess
 from src.extractors.email_extractor import extract_email_data
 from src.extractors.zip_extractor import extract_zip_data
@@ -154,13 +154,20 @@ class IngestionOrchestrator:
         try:
             logger.debug(f"Starting chunking and embedding for document ID {doc_id}")
             
-            # 1. Chunk the document content
-            chunks = chunk_text(markdown_content)
+            # 1. Chunk the document content with explicit max size
+            chunks = chunk_text(markdown_content, max_chunk_size=4000)
             if not chunks:
                 logger.debug(f"No chunks generated for document ID {doc_id}")
                 return
 
             logger.info(f"Generated {len(chunks)} chunks for document ID {doc_id}")
+            
+            # Debug: Log chunk sizes to verify they're within limits
+            oversized_chunks = [i for i, chunk in enumerate(chunks) if len(chunk) > 4000]
+            if oversized_chunks:
+                logger.warning(f"Found {len(oversized_chunks)} oversized chunks for document ID {doc_id}: {oversized_chunks}")
+                for i in oversized_chunks:
+                    logger.warning(f"  Chunk {i+1}: {len(chunks[i])} characters")
 
             # 2. Generate embeddings for the chunks
             embeddings = create_embeddings(chunks)
