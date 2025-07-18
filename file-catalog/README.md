@@ -9,8 +9,9 @@ Ein fokussiertes **Dokument-Ingestion-System** mit KI-gestützter Analyse, erwei
 ### Kern-Funktionalitäten
 - **📄 Erweiterte Dokumentenextraktion** - Unterstützung für markitdown, pandoc und docling
 - **🤖 Ollama LLM Integration** - Lokale KI-Metadaten-Extraktion
-- **📊 Multi-Format Support** - PDF (docling), Office-Dokumente (markitdown), Markup (pandoc)
+- **📊 Multi-Format Support** - PDF (docling), Office-Dokumente (markitdown), Markup (pandoc), Bilder (docling OCR)
 - **⚡ Embedding-Generation** - BGE-M3 Vektorembeddings über Ollama
+- **🧠 Intelligente Bildverarbeitung** - OCR + Layout-Analyse mit Docling (Apple Silicon optimiert)
 - **📧 E-Mail & Archive Support** - EML-Dateien und ZIP-Archive
 - **🔍 Volltext-Suche** - FTS5 mit automatischer Synchronisation
 - **🗃️ MCP-Datenbank** - Vollständige Model Context Protocol Unterstützung
@@ -31,7 +32,7 @@ Ein fokussiertes **Dokument-Ingestion-System** mit KI-gestützter Analyse, erwei
 | **PDF** | docling | markitdown, pandoc | Optimiert für PDFs |
 | **Office-Dokumente** | markitdown | pandoc | DOCX, XLSX, PPTX, etc. |
 | **Markup** | pandoc | markitdown | HTML, RTF, EPUB |
-| **Bilder** | exiftool | basic | Metadaten-Extraktion |
+| **Bilder** | docling (OCR) | exiftool | OCR + Layout-Analyse |
 | **Code** | direct read | - | Syntax-Preservation |
 | **Text** | direct read | - | TXT, MD, CSV, JSON |
 
@@ -149,7 +150,7 @@ python full_ingestion_test.py --no-clear
 - **📄 PDFs**: `docling` → `markitdown` → `pandoc`
 - **📝 Office**: `markitdown` → `pandoc` (DOCX, XLSX, PPTX, ODT, ODS, ODP, Pages)
 - **🌐 Markup**: `pandoc` → `markitdown` (HTML, HTM, RTF, EPUB)
-- **🖼️ Bilder**: `exiftool` → basic (JPEG, JPG, PNG, BMP, GIF, TIFF für Metadaten)
+- **🖼️ Bilder**: `docling` (OCR) → `exiftool` → basic (JPEG, JPG, PNG, BMP, GIF, TIFF, WEBP)
 - **💻 Code**: Direct read (PY, JS, TS, JAVA, GO, SH, CPP, C, H, CSS)
 - **📋 Text**: Direct read (TXT, MD, MARKDOWN, CSV, JSON, XML)
 
@@ -163,7 +164,7 @@ python full_ingestion_test.py --no-clear
 - **PDFs**: `.pdf`
 - **Office**: `.docx`, `.pptx`, `.xlsx`, `.odt`, `.ods`, `.odp`, `.pages`
 - **Markup**: `.html`, `.htm`, `.rtf`, `.epub`
-- **Bilder**: `.jpeg`, `.jpg`, `.png`, `.bmp`, `.gif`, `.tiff`
+- **Bilder**: `.jpeg`, `.jpg`, `.png`, `.bmp`, `.gif`, `.tiff`, `.webp`
 - **Code**: `.py`, `.js`, `.ts`, `.java`, `.go`, `.sh`, `.cpp`, `.c`, `.h`, `.css`
 - **Text**: `.txt`, `.md`, `.markdown`, `.csv`, `.json`, `.xml`
 
@@ -190,7 +191,7 @@ python full_ingestion_test.py --no-clear
 **Verarbeitung**:
 - PDFs: `docling` → `markitdown` → `pandoc`
 - Office: `markitdown` → `pandoc` (konfigurierbar)
-- Bilder: `exiftool` für Metadaten
+- Bilder: `docling` (OCR + Layout-Analyse) → `exiftool` für Metadaten
 - Code/Text: Direktes Lesen mit Formatierung
 
 ### 2. E-Mail-Extractor (`email_extractor.py`)
