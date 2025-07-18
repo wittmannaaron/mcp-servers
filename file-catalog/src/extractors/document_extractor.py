@@ -5,7 +5,7 @@ Supports multiple processing tools based on file type and preferences.
 Tool Priority (based on specifications):
 - PDF: docling (existing, optimized for PDFs)  
 - Office & Others: markitdown (primary), pandoc (fallback)
-- Images: exiftool/piexif for metadata
+- Images: docling with OCR/layout analysis (no vision models), exiftool fallback
 - Code: Direct text reading with syntax preservation
 """
 
@@ -15,8 +15,16 @@ from typing import Dict, Any, Optional
 from loguru import logger
 import mimetypes
 import json
+import warnings
+import platform
 
 from src.core.simple_config import settings
+
+# Suppress PyTorch MPS warnings on Apple Silicon
+if platform.system() == "Darwin" and platform.machine() == "arm64":
+    warnings.filterwarnings("ignore", message=".*pin_memory.*not supported on MPS.*")
+    warnings.filterwarnings("ignore", message=".*MPS backend out of memory.*")
+    warnings.filterwarnings("ignore", message=".*torch.utils.data.dataloader.*")
 
 
 class DocumentExtractor:
@@ -140,10 +148,10 @@ class DocumentExtractor:
             else:
                 return {"error": f"No markup extraction tool for {extension}"}
         
-        # Images - extract metadata only
-        image_extensions = {'.jpeg', '.jpg', '.png', '.bmp', '.gif', '.tiff'}
+        # Images - intelligent processing with Docling, fallback to EXIF
+        image_extensions = {'.jpeg', '.jpg', '.png', '.bmp', '.gif', '.tiff', '.webp'}
         if extension in image_extensions:
-            return self._extract_image_metadata(file_path)
+            return self._extract_image_content(file_path)
         
         # Code files - direct text reading
         code_extensions = {'.py', '.js', '.ts', '.java', '.go', '.sh', '.cpp', '.c', '.h', '.css'}
@@ -263,8 +271,115 @@ class DocumentExtractor:
             logger.error(f"Pandoc extraction failed for {file_path}: {e}")
             return {"error": f"Pandoc extraction failed: {str(e)}"}
     
+    def _extract_image_content(self, file_path: Path) -> Dict[str, Any]:
+        """Extract content from images using Docling with EXIF fallback."""
+        try:
+            # Try Docling first for potential document content
+            if self.supported_tools.get('docling'):
+                logger.debug(f"Attempting Docling extraction for image: {file_path}")
+                docling_result = self._extract_with_docling_images(file_path)
+                
+                # Check if Docling found meaningful content
+                if docling_result.get('success') and self._has_meaningful_content(docling_result):
+                    logger.info(f"Docling successfully extracted content from image: {file_path}")
+                    return docling_result
+                else:
+                    logger.debug(f"Docling found no meaningful content in image: {file_path}")
+            
+            # Fallback to EXIF metadata extraction
+            logger.debug(f"Using EXIF fallback for image: {file_path}")
+            return self._extract_image_metadata(file_path)
+            
+        except Exception as e:
+            logger.error(f"Image content extraction failed for {file_path}: {e}")
+            # Final fallback to EXIF metadata
+            return self._extract_image_metadata(file_path)
+    
+    def _extract_with_docling_images(self, file_path: Path) -> Dict[str, Any]:
+        """Extract content from images using Docling with OCR and layout analysis."""
+        try:
+            from docling.document_converter import DocumentConverter
+            from docling.datamodel.base_models import InputFormat
+            from docling.datamodel.pipeline_options import PdfPipelineOptions
+            from docling.document_converter import ImageFormatOption
+            
+            logger.debug(f"Extracting image content with Docling: {file_path}")
+            
+            # Configure pipeline for image processing (without vision models)
+            pipeline_options = PdfPipelineOptions()
+            pipeline_options.do_ocr = True
+            pipeline_options.do_picture_description = False  # Disable vision models
+            pipeline_options.do_picture_classification = False  # Disable vision models
+            pipeline_options.images_scale = 2.0
+            pipeline_options.generate_picture_images = True
+            pipeline_options.enable_remote_services = False  # Disable remote model downloads
+            
+            # Initialize converter with image format options
+            converter = DocumentConverter(
+                format_options={
+                    InputFormat.IMAGE: ImageFormatOption(
+                        pipeline_options=pipeline_options
+                    )
+                }
+            )
+            
+            # Convert image document
+            result = converter.convert(str(file_path))
+            
+            # Extract content
+            markdown_content = result.document.export_to_markdown()
+            
+            # Get structured information (OCR only, no vision models)
+            extracted_text = []
+            
+            # Iterate through document elements to extract OCR text
+            for element, _level in result.document.iterate_items():
+                if hasattr(element, 'text') and element.text.strip():
+                    extracted_text.append(element.text.strip())
+            
+            # Create comprehensive markdown content
+            comprehensive_content = f"# Image Analysis: {file_path.name}\n\n"
+            
+            if extracted_text:
+                comprehensive_content += "## Extracted Text (OCR)\n\n"
+                for text in extracted_text:
+                    comprehensive_content += f"{text}\n\n"
+            else:
+                # If no OCR text was extracted, use raw markdown
+                comprehensive_content += "## Raw Content\n\n"
+                comprehensive_content += markdown_content
+            
+            return {
+                'original_text': '\n'.join(extracted_text) if extracted_text else markdown_content,
+                'markdown_content': comprehensive_content,
+                'extracted_text': extracted_text,
+                'extraction_tool': 'docling_images_ocr_only',
+                'success': True
+            }
+            
+        except Exception as e:
+            logger.error(f"Docling image extraction failed for {file_path}: {e}")
+            return {"error": f"Docling image extraction failed: {str(e)}", "success": False}
+    
+    def _has_meaningful_content(self, result: Dict[str, Any]) -> bool:
+        """Check if Docling extracted meaningful content from the image (OCR only)."""
+        if not result.get('success'):
+            return False
+        
+        # Check for extracted text (OCR)
+        extracted_text = result.get('extracted_text', [])
+        if extracted_text and any(text.strip() for text in extracted_text):
+            return True
+        
+        # Check original text length (avoid very short extractions)
+        original_text = result.get('original_text', '')
+        if original_text and len(original_text.strip()) > 50:
+            return True
+        
+        return False
+
     def _extract_image_metadata(self, file_path: Path) -> Dict[str, Any]:
-        """Extract metadata from images using exiftool."""
+        """Extract metadata from images using exiftool (fallback method)."""
         try:
             if not self.supported_tools.get('exiftool'):
                 return {

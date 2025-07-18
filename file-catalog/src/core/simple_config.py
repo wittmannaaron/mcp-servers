@@ -33,8 +33,8 @@ class SimpleConfig:
             '.pdf',
             # Email files
             '.eml',
-            # Images (for metadata extraction)
-            '.jpeg', '.jpg', '.png', '.bmp',
+            # Images (for metadata and content extraction)
+            '.jpeg', '.jpg', '.png', '.bmp', '.tiff', '.webp',
             # Archives
             '.zip', '.tar', '.tar.gz', '.tgz',
             # Code files (for documentation extraction)
