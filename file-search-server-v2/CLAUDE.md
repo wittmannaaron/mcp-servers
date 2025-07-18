@@ -19,13 +19,14 @@ This is an MCP (Model Context Protocol) File Search Server V2 that provides docu
 ### Database Structure
 
 The system uses SQLite with these key tables:
-- `documents`: Main table with 88 indexed documents containing rich metadata
+- `documents`: Main table containing rich metadata
 - `documents_fts_extended`: FTS5 virtual table for full-text search
 - `persons_fuzzy`, `places_fuzzy`: Fuzzy matching tables (implemented but not currently used)
+- `New semantic functions added to database, tables like chunks and chunk_vectors can be used for semantic searches`
 
-Database location: `/Users/aaron/Projects/Simple_MCP_DB/filebrowser.db`
+Database location: `/Users/aaron/Projects/mcp-server/file-search-server-v3/filebrowser.db`
 
-## Current Status (Ground Zero)
+## Current Status (before database changes)
 
 ### ✅ Implemented and Working
 - **FTS Search**: Returns up to 5 results using exact SQL query
@@ -33,6 +34,7 @@ Database location: `/Users/aaron/Projects/Simple_MCP_DB/filebrowser.db`
 - **Llama 3.2 Function Calling**: Proper format `[getData(search_terms=['Ihring'])]`
 - **MCP Communication**: Stable client-server communication 
 - **Real Data**: Returns actual database content when found
+- **WebKit-Client** GUI Client for chatting with data catalogue.
 
 ### 🔧 Currently Active Tools
 1. `getData(search_terms)` - FTS search returning up to 5 results
@@ -62,7 +64,10 @@ python tests/test_refined_prompts.py
 
 ### Search Flow
 ```
-German Query → LLM Keyword Extraction → MCP getData() → SQLite FTS → Results
+# Till now:
+# German Query → LLM Keyword Extraction → MCP getData() → SQLite FTS → Results
+# New version (todo)
+German Query → LLM Keyword Extraction → MCP getData() → SQLite FTS + Semantic Search → Results
 ```
 
 ### Function Calling Format
@@ -90,21 +95,22 @@ Uses proven prompt achieving 100% success rate:
 1. **Dynamic Search Terms**: ✅ Completed - uses extracted keywords instead of hardcoded 'Ihring'
 2. **Fuzzy Search Integration**: Re-enable existing fuzzy tables for person/place matching
 3. **Vector Search**: Add semantic search capabilities
-4. **Advanced Features**: Multi-mode search ranking, filters, etc.
+4. **Advanced Features**: Multi-mode search ranking, filters, search by date, search in between two dates, etc.
 
 ## Testing Strategy
 
-Test files in `tests/` directory verify:
+# Test files in `tests/` directory verify:
+Tests can be verified using the database entries and compare them to results.
 - Keyword extraction accuracy across different German sentence patterns
 - Function calling format compliance
 - LLM prompt effectiveness
 
 ## Important Notes
 
-- **German Language**: System optimized for German queries and responses
-- **Local Files**: Searches user's local document collection only
+- **German Language**: System must be optimized for German queries and responses
+- **Local Files**: Searches user's local document collection only.
 - **Minimal Core**: Current implementation is intentionally minimal and stable
-- **Debug Output**: Extensive logging for development and troubleshooting
-- **Data Integrity**: Returns real database content when found; may hallucinate when no results found (minor issue for future improvement)
+- **Debug Output**: Extensive logging for development and troubleshooting (needs to be checked)
+- **Data Integrity**: Returns real database content when found; may hallucinate when no results found (might be fixed in using proper system prompt formating)
 
-This is the stable foundation for all future development.
+

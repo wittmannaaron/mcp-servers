@@ -1,5 +1,5 @@
 """
-LLM Prompts for FileBrowser Document Analysis.
+LLM Prompts for file-catalog Document Analysis.
 Contains prompts for AI-powered metadata generation and document analysis.
 """
 

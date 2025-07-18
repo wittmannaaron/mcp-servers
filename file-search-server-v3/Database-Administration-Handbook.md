@@ -511,7 +511,7 @@ DROP TABLE IF EXISTS documents_fts_extended;
 sqlite3 /Users/aaron/Projects/mcp-servers/file-search-server-v3/data/filebrowser.db "SELECT COUNT(*) FROM documents;"
 
 # Schnelle FTS-Suche testen
-sqlite3 /Users/aaron/Projects/mcp-servers/file-search-server-v3/data/filebrowser.db "SELECT COUNT(*) FROM documents_fts_extended WHERE documents_fts_extended MATCH 'test';"
+sqlite3 /Users/aaron/Projects/mcp-servers/file-search-server-v3/data/filebrowser.db "SELECT COUNT(*) FROM documents_fts_extended WHERE documents_fts_extended MATCH 'Ihring';"
 
 # Trigger-Status schnell prüfen
 sqlite3 /Users/aaron/Projects/mcp-servers/file-search-server-v3/data/filebrowser.db "SELECT name FROM sqlite_master WHERE type='trigger';"

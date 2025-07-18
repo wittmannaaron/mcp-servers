@@ -33,11 +33,11 @@ class IngestionMCPClient:
                 command="uv",
                 args=[
                     "--directory",
-                    "/Users/aaron/Projects/mcp-servers/src/sqlite",
+                    "/Users/aaron/Projects/mcp-servers/file-search-server-v3/src/sqlite",
                     "run",
                     "mcp-server-sqlite",
                     "--db-path",
-                    "/Users/aaron/Projects/Simple_MCP_DB/filebrowser.db"
+                    "/Users/aaron/Projects/mcp-servers/file-search-server-v3/data/filebrowser.db"
                 ],
                 env=None
             )

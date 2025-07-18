@@ -97,8 +97,8 @@ class RealWebKitClient(MCPClientTerminal):
             keywords = self.extract_keywords_with_llm(query)
             print(f"[WEBKIT] Extracted keywords: {keywords}")
             
-            # Search files using the existing MCP method
-            results = self.search_files_with_keywords(keywords)
+            # Search files using the existing MCP method with OR mode first
+            results = self.search_files_with_keywords(keywords, "OR")
             print(f"[WEBKIT] Found {len(results)} results")
             
             if results:

@@ -669,16 +669,20 @@ class MCPClientTerminal:
             print(f"Fehler beim Speichern der HTML-Datei: {e}")
     
     def extract_keywords_with_llm(self, query: str) -> List[str]:
-        """Extract keywords from German query using our tested LLM prompt"""
+        """Extract keywords from German query using enhanced LLM prompt for multi-word support"""
         try:
-            keyword_prompt = """Extrahiere nur die wichtigsten Suchbegriffe:
+            keyword_prompt = """Extrahiere alle wichtigen Suchbegriffe aus der deutschen Anfrage. 
+Jeder Begriff sollte separat aufgelistet werden.
 
-Beispiel:
+Beispiele:
 "Bitte liste alle Dateien auf, die das Wort Ihring beinhalten" → Ihring
 "Finde Dateien über BMW" → BMW  
 "Suche nach Dokumenten mit Anke oder Familie" → Anke, Familie
+"Zeige mir Dateien über Ihring und BMW" → Ihring, BMW
+"Finde alle PDF-Dateien mit Vertrag und Sparkasse" → PDF, Vertrag, Sparkasse
+"Hausbegehung Blumenstrasse Dokumente" → Hausbegehung, Blumenstrasse, Dokumente
 
-Antworte nur mit den Begriffen, keine weiteren Worte.
+Antworte nur mit den Begriffen getrennt durch Kommas, keine weiteren Worte.
 
 Input: {query}
 Output:""".format(query=query)
@@ -699,9 +703,13 @@ Output:""".format(query=query)
                 result = response.json()
                 extracted = result.get("response", "").strip()
                 
-                # Parse comma-separated keywords
+                # Parse comma-separated keywords and clean them
                 if extracted:
-                    keywords = [kw.strip() for kw in extracted.split(',') if kw.strip()]
+                    keywords = []
+                    for kw in extracted.split(','):
+                        clean_kw = kw.strip().replace('"', '').replace("'", '')
+                        if clean_kw and len(clean_kw) > 1:  # Only meaningful terms
+                            keywords.append(clean_kw)
                     return keywords if keywords else ["Ihring"]  # Fallback
                 else:
                     return ["Ihring"]  # Fallback
@@ -712,12 +720,15 @@ Output:""".format(query=query)
             print(f"DEBUG: Keyword extraction failed: {e}")
             return ["Ihring"]  # Fallback
 
-    def search_files_with_keywords(self, keywords: List[str]) -> List[Dict[str, Any]]:
-        """Search files using MCP server with extracted keywords"""
+    def search_files_with_keywords(self, keywords: List[str], search_mode: str = "OR") -> List[Dict[str, Any]]:
+        """Search files using MCP server with extracted keywords - simplified for reliability"""
         if not self.mcp_process or not self.mcp_initialized:
             return []
         
         try:
+            # Use simple getData instead of complex auto mode for now
+            # This avoids the auto-mode complexity that might be causing JSON issues
+            
             mcp_request = {
                 "jsonrpc": "2.0",
                 "id": str(uuid.uuid4()),
@@ -725,12 +736,14 @@ Output:""".format(query=query)
                 "params": {
                     "name": "getData",
                     "arguments": {
-                        "search_terms": keywords
+                        "search_terms": keywords,
+                        "search_mode": search_mode
                     }
                 }
             }
             
             request_json = json.dumps(mcp_request) + "\n"
+            print(f"DEBUG: Sending MCP request: {request_json.strip()}")
             self.mcp_process.stdin.write(request_json)
             self.mcp_process.stdin.flush()
             
@@ -740,36 +753,53 @@ Output:""".format(query=query)
             
             if ready:
                 response_line = self.mcp_process.stdout.readline()
-                if response_line:
-                    response = json.loads(response_line)
-                    print(f"DEBUG MCP Response: {response}")
-                    
-                    if "result" in response and "content" in response["result"]:
-                        content = response["result"]["content"]
-                        if isinstance(content, list) and len(content) > 0:
-                            results = []
-                            for item in content:
-                                if isinstance(item, dict) and "text" in item:
-                                    text_content = item["text"]
-                                    try:
-                                        parsed_result = json.loads(text_content)
-                                        results.append(parsed_result)
-                                    except json.JSONDecodeError as e:
-                                        print(f"DEBUG JSON Parse Error for item: {e}")
-                                        results.append({"raw_response": text_content})
-                            
-                            print(f"DEBUG Parsed Results: {len(results)} items")
-                            return results
-                    elif "error" in response:
-                        print(f"MCP-Fehler: {response['error']}")
+                print(f"DEBUG: Raw response: {repr(response_line)}")
+                
+                if response_line and response_line.strip():
+                    try:
+                        response = json.loads(response_line)
+                        print(f"DEBUG MCP Response: {response}")
+                        
+                        if "result" in response and "content" in response["result"]:
+                            content = response["result"]["content"]
+                            if isinstance(content, list) and len(content) > 0:
+                                results = []
+                                for item in content:
+                                    if isinstance(item, dict) and "text" in item:
+                                        text_content = item["text"]
+                                        try:
+                                            parsed_result = json.loads(text_content)
+                                            results.append(parsed_result)
+                                        except json.JSONDecodeError as e:
+                                            print(f"DEBUG JSON Parse Error for item: {e}")
+                                            results.append({"raw_response": text_content})
+                                
+                                print(f"DEBUG Parsed Results: {len(results)} items")
+                                return results
+                            else:
+                                print(f"DEBUG: Empty or invalid content: {content}")
+                                return []
+                        elif "error" in response:
+                            print(f"MCP-Fehler: {response['error']}")
+                            return []
+                        else:
+                            print(f"DEBUG: Unexpected response structure: {response}")
+                            return []
+                    except json.JSONDecodeError as e:
+                        print(f"DEBUG: Failed to parse JSON: {e}")
+                        print(f"DEBUG: Response content: {repr(response_line)}")
                         return []
+                else:
+                    print("DEBUG: Empty response from server")
+                    return []
             else:
                 print("Timeout beim Warten auf MCP-Antwort")
-            
-            return []
+                return []
             
         except Exception as e:
             print(f"MCP-Suchfehler: {e}")
+            import traceback
+            traceback.print_exc()
             return []
 
     def call_ollama_with_function_calling(self, query: str) -> str:
@@ -814,8 +844,8 @@ Output:""".format(query=query)
                         search_terms = self.parse_search_terms(params_str)
                         print(f"DEBUG: Parsed search terms: {search_terms}")
                         
-                        # Call MCP server
-                        search_results = self.search_files_with_keywords(search_terms)
+                        # Call MCP server with OR mode (simplified)
+                        search_results = self.search_files_with_keywords(search_terms, "OR")
                         
                         # Generate HTML table for results
                         if search_results:
