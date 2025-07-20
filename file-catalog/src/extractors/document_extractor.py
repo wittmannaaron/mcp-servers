@@ -19,6 +19,7 @@ import warnings
 import platform
 
 from src.core.simple_config import settings
+from src.utils.pages_converter import pages_converter
 
 # Suppress PyTorch MPS warnings on Apple Silicon
 if platform.system() == "Darwin" and platform.machine() == "arm64":
@@ -125,8 +126,12 @@ class DocumentExtractor:
             else:
                 return {"error": "No PDF extraction tools available"}
         
+        # Pages files - special handling for macOS
+        if extension == '.pages':
+            return self._extract_pages_file(file_path)
+        
         # Office documents - prioritize markitdown, fallback to pandoc
-        office_extensions = {'.docx', '.pptx', '.xlsx', '.odt', '.ods', '.odp', '.pages'}
+        office_extensions = {'.docx', '.pptx', '.xlsx', '.odt', '.ods', '.odp'}
         if extension in office_extensions:
             if settings.prefer_markitdown and self.supported_tools.get('markitdown'):
                 result = self._extract_with_markitdown(file_path)
@@ -418,6 +423,72 @@ class DocumentExtractor:
         except Exception as e:
             logger.error(f"Image metadata extraction failed for {file_path}: {e}")
             return {"error": f"Image metadata extraction failed: {str(e)}"}
+    
+    def _extract_pages_file(self, file_path: Path) -> Dict[str, Any]:
+        """Extract content from Apple Pages files on macOS."""
+        if not pages_converter.is_available():
+            # Non-macOS or Pages not available
+            return {
+                'original_text': f"Pages file: {file_path.name}\n\nPages files can only be processed on macOS with Pages application installed.",
+                'markdown_content': f"# Pages Document: {file_path.name}\n\n**Note**: Pages files can only be processed on macOS with Pages application installed.\n\n**File Path**: {file_path}\n**Size**: {file_path.stat().st_size} bytes",
+                'extraction_tool': 'pages_unavailable',
+                'success': True,
+                'metadata': {
+                    'pages_processing': 'unavailable',
+                    'system': platform.system(),
+                    'reason': 'Pages application not available or not on macOS'
+                }
+            }
+        
+        logger.debug(f"Converting Pages file using AppleScript: {file_path}")
+        
+        # Convert Pages to DOCX using AppleScript
+        success, temp_docx_path, error_msg = pages_converter.convert_to_docx(file_path)
+        
+        if not success:
+            logger.error(f"Pages conversion failed: {error_msg}")
+            return {"error": f"Pages conversion failed: {error_msg}"}
+        
+        try:
+            # Process the temporary DOCX file with markitdown
+            if self.supported_tools.get('markitdown'):
+                logger.debug(f"Processing converted DOCX with markitdown: {temp_docx_path}")
+                result = self._extract_with_markitdown(temp_docx_path)
+                
+                if 'error' not in result:
+                    # Update extraction tool info
+                    result['extraction_tool'] = 'pages_applescript_markitdown'
+                    result['conversion_info'] = {
+                        'original_format': 'pages',
+                        'intermediate_format': 'docx',
+                        'final_processor': 'markitdown'
+                    }
+                    logger.info(f"Successfully extracted Pages content via AppleScript + markitdown: {file_path}")
+                    return result
+            
+            # Fallback to pandoc if markitdown failed
+            if self.supported_tools.get('pandoc'):
+                logger.debug(f"Processing converted DOCX with pandoc: {temp_docx_path}")
+                result = self._extract_with_pandoc(temp_docx_path)
+                
+                if 'error' not in result:
+                    # Update extraction tool info
+                    result['extraction_tool'] = 'pages_applescript_pandoc'
+                    result['conversion_info'] = {
+                        'original_format': 'pages',
+                        'intermediate_format': 'docx',
+                        'final_processor': 'pandoc'
+                    }
+                    logger.info(f"Successfully extracted Pages content via AppleScript + pandoc: {file_path}")
+                    return result
+            
+            # No tools available to process the DOCX
+            return {"error": "Pages file converted to DOCX but no tools available to extract content"}
+            
+        finally:
+            # Always clean up the temporary DOCX file
+            if temp_docx_path:
+                pages_converter.cleanup_temp_file(temp_docx_path)
     
     def _extract_code_file(self, file_path: Path) -> Dict[str, Any]:
         """Extract code files with syntax preservation."""

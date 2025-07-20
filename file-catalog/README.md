@@ -148,7 +148,8 @@ python full_ingestion_test.py --no-clear
 
 ### Dokumente mit intelligenter Tool-Auswahl
 - **📄 PDFs**: `docling` → `markitdown` → `pandoc`
-- **📝 Office**: `markitdown` → `pandoc` (DOCX, XLSX, PPTX, ODT, ODS, ODP, Pages)
+- **📝 Office**: `markitdown` → `pandoc` (DOCX, XLSX, PPTX, ODT, ODS, ODP)
+- **📄 Pages**: AppleScript → `markitdown` → `pandoc` (macOS only)
 - **🌐 Markup**: `pandoc` → `markitdown` (HTML, HTM, RTF, EPUB)
 - **🖼️ Bilder**: `docling` (OCR) → `exiftool` → basic (JPEG, JPG, PNG, BMP, GIF, TIFF, WEBP)
 - **💻 Code**: Direct read (PY, JS, TS, JAVA, GO, SH, CPP, C, H, CSS)
@@ -162,7 +163,8 @@ python full_ingestion_test.py --no-clear
 
 #### Dokument-Extractor
 - **PDFs**: `.pdf`
-- **Office**: `.docx`, `.pptx`, `.xlsx`, `.odt`, `.ods`, `.odp`, `.pages`
+- **Office**: `.docx`, `.pptx`, `.xlsx`, `.odt`, `.ods`, `.odp`
+- **Pages (macOS)**: `.pages` (via AppleScript conversion)
 - **Markup**: `.html`, `.htm`, `.rtf`, `.epub`
 - **Bilder**: `.jpeg`, `.jpg`, `.png`, `.bmp`, `.gif`, `.tiff`, `.webp`
 - **Code**: `.py`, `.js`, `.ts`, `.java`, `.go`, `.sh`, `.cpp`, `.c`, `.h`, `.css`
@@ -191,8 +193,28 @@ python full_ingestion_test.py --no-clear
 **Verarbeitung**:
 - PDFs: `docling` → `markitdown` → `pandoc`
 - Office: `markitdown` → `pandoc` (konfigurierbar)
+- Pages (macOS): AppleScript Export zu DOCX → `markitdown` → `pandoc`
 - Bilder: `docling` (OCR + Layout-Analyse) → `exiftool` für Metadaten
 - Code/Text: Direktes Lesen mit Formatierung
+
+### 1.1. Pages-Converter (`pages_converter.py`)
+**Zweck**: Spezielle Behandlung von Apple Pages-Dateien auf macOS-Systemen
+
+**Funktionalität**:
+- **macOS-AppleScript-Integration**: Nutzt Pages-App zum Export als DOCX
+- **Automatische Verfügbarkeitsprüfung**: Erkennt macOS und Pages-Installation
+- **Temporäre Dateiverwaltung**: Sichere Erstellung und Bereinigung von DOCX-Dateien
+- **Fallback-Mechanismus**: Graceful degradation auf Nicht-macOS-Systemen
+
+**Verarbeitungsschritte**:
+1. **Verfügbarkeitsprüfung**: Prüft macOS und Pages-App-Installation
+2. **AppleScript-Automation**: Öffnet Pages, exportiert als DOCX, schließt ohne Speichern
+3. **Content-Extraktion**: Temporäre DOCX wird mit `markitdown` oder `pandoc` verarbeitet
+4. **Aufräumen**: Automatische Bereinigung der temporären DOCX-Datei
+
+**Systemkompatibilität**:
+- **macOS**: Vollständige Pages-Content-Extraktion via AppleScript
+- **Andere Systeme**: Katalogisierung mit Hinweis auf fehlende macOS-Unterstützung
 
 ### 2. E-Mail-Extractor (`email_extractor.py`)
 **Zweck**: Spezialisiert auf `.eml` E-Mail-Dateien mit Anhang-Verarbeitung
