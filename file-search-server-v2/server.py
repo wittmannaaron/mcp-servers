@@ -12,7 +12,103 @@ from typing import List, Dict, Any, Optional
 mcp = FastMCP("file-search-server-v2")
 
 def get_db_connection():
-    return sqlite3.connect("/Users/aaron/Projects/mcp-servers/file-catalog/data/filecatalog.db")
+    return sqlite3.connect("/Users/aaron/Projects/mcp-servers/file-search-server-v3/data/filebrowser.db")
+
+def initialize_fuzzy_tables():
+    """Initialize and populate fuzzy search tables from existing document data"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        print("Initializing fuzzy search tables...")
+        
+        # Check if fuzzy tables are already populated
+        cursor.execute("SELECT COUNT(*) FROM persons_fuzzy")
+        persons_count = cursor.fetchone()[0]
+        
+        cursor.execute("SELECT COUNT(*) FROM places_fuzzy") 
+        places_count = cursor.fetchone()[0]
+        
+        if persons_count > 0 and places_count > 0:
+            print(f"Fuzzy tables already populated: {persons_count} persons, {places_count} places")
+            return
+        
+        # Clear existing data
+        cursor.execute("DELETE FROM persons_fuzzy")
+        cursor.execute("DELETE FROM places_fuzzy")
+        
+        # Populate persons_fuzzy table
+        cursor.execute("SELECT id, persons FROM documents WHERE persons IS NOT NULL AND persons != '' AND persons != '[]'")
+        docs_with_persons = cursor.fetchall()
+        
+        for doc_id, persons_json in docs_with_persons:
+            try:
+                persons = json.loads(persons_json) if persons_json else []
+                for person in persons:
+                    if isinstance(person, dict) and 'name' in person:
+                        name = person['name']
+                    elif isinstance(person, str):
+                        name = person
+                    else:
+                        continue
+                        
+                    if name and len(name.strip()) > 1:
+                        normalized_name = name.upper().replace('Ä', 'AE').replace('Ö', 'OE').replace('Ü', 'UE').replace('ß', 'SS')
+                        soundex_code = soundex(name)
+                        
+                        cursor.execute("""
+                            INSERT OR IGNORE INTO persons_fuzzy 
+                            (document_id, original_name, soundex_code, normalized_name)
+                            VALUES (?, ?, ?, ?)
+                        """, [doc_id, name, soundex_code, normalized_name])
+                        
+            except json.JSONDecodeError:
+                continue
+        
+        # Populate places_fuzzy table  
+        cursor.execute("SELECT id, places FROM documents WHERE places IS NOT NULL AND places != '' AND places != '[]'")
+        docs_with_places = cursor.fetchall()
+        
+        for doc_id, places_json in docs_with_places:
+            try:
+                places = json.loads(places_json) if places_json else []
+                for place in places:
+                    if isinstance(place, dict) and 'name' in place:
+                        place_name = place['name']
+                    elif isinstance(place, str):
+                        place_name = place
+                    else:
+                        continue
+                        
+                    if place_name and len(place_name.strip()) > 1:
+                        normalized_place = place_name.upper().replace('Ä', 'AE').replace('Ö', 'OE').replace('Ü', 'UE').replace('ß', 'SS')
+                        soundex_code = soundex(place_name)
+                        
+                        cursor.execute("""
+                            INSERT OR IGNORE INTO places_fuzzy 
+                            (document_id, original_place, soundex_code, normalized_place)
+                            VALUES (?, ?, ?, ?)
+                        """, [doc_id, place_name, soundex_code, normalized_place])
+                        
+            except json.JSONDecodeError:
+                continue
+        
+        conn.commit()
+        
+        # Report results
+        cursor.execute("SELECT COUNT(*) FROM persons_fuzzy")
+        final_persons = cursor.fetchone()[0]
+        
+        cursor.execute("SELECT COUNT(*) FROM places_fuzzy")
+        final_places = cursor.fetchone()[0]
+        
+        print(f"Fuzzy tables populated: {final_persons} persons, {final_places} places")
+        
+    except Exception as e:
+        print(f"Error initializing fuzzy tables: {e}")
+        conn.rollback()
+    finally:
+        conn.close()
 
 def soundex(name: str) -> str:
     """Simple soundex implementation for German names"""
@@ -65,7 +161,7 @@ async def semantic_expression_search(query: str) -> List[Dict[str, Any]]:
         if not clean_query:
             return []
         
-        # Use FTS5 search across content fields
+        # Use FTS5 search (documents_fts_extended table available)
         sql = """
         SELECT 
             d.id,
@@ -73,9 +169,9 @@ async def semantic_expression_search(query: str) -> List[Dict[str, Any]]:
             d.file_path,
             d.created_at,
             SUBSTR(COALESCE(d.original_text, d.markdown_content, d.summary, ''), 1, 300) as content_preview
-        FROM documents_fts fts
+        FROM documents_fts_extended fts
         JOIN documents d ON d.id = fts.rowid
-        WHERE documents_fts MATCH ?
+        WHERE documents_fts_extended MATCH ?
         ORDER BY rank
         LIMIT 50
         """
@@ -608,4 +704,6 @@ async def get_database_stats() -> Dict[str, Any]:
         conn.close()
 
 if __name__ == "__main__":
+    # Initialize fuzzy tables on startup
+    initialize_fuzzy_tables()
     mcp.run(transport='stdio')

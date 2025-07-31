@@ -6,7 +6,7 @@ Technical specification for upgrading MCP file search server to comprehensive do
 **Version:** 2.0  
 **Target:** Llama3.2:3B via custom `catalog-browser` model  
 **Language:** German input/content, English system instructions  
-**Database:** `/Users/aaron/Projects/mcp-servers/file-catalog/data/filecatalog.db` (READ-ONLY)
+**Database:** `/Users/aaron/Projects/mcp-servers/file-search-server-v3/data/filebrowser.db` (READ-ONLY)
 
 ## Core Capabilities
 

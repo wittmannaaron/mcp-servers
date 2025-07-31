@@ -39,7 +39,7 @@ ollama create catalog-browser -f ./Modelfile-catalog-browser
 
 The system uses an existing SQLite database at:
 ```
-/Users/aaron/Projects/mcp-servers/file-catalog/data/filecatalog.db
+/Users/aaron/Projects/mcp-servers/file-search-server-v3/data/filebrowser.db
 ```
 
 See `Database-Administration-Handbook.md` for complete schema documentation.

@@ -13,7 +13,7 @@
 
 ## Datenbankübersicht
 
-**Datenbankpfad:** `/Users/aaron/Projects/mcp-servers/file-catalog/data/filecatalog.db`
+**Datenbankpfad:** `/Users/aaron/Projects/mcp-servers/file-search-server-v3/data/filebrowser.db`
 
 ### Haupttabellen
 - `documents` - Haupttabelle für alle Dokumente
