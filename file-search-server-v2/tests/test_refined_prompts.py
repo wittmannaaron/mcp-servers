@@ -7,7 +7,7 @@ import json
 
 def test_refined_prompts():
     ollama_url = "http://localhost:11434"
-    model_name = "llama3.2:latest"
+    model_name = "catalog-browser"
     
     # Our critical test sentences
     test_sentences = [

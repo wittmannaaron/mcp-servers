@@ -1,149 +1,572 @@
 #!/usr/bin/env python3
 """
-Enhanced MCP File Search Server with Multi-Word Search Support
+MCP File Search Server V2 - German Document Research Assistant
+With 9 specialized search tools for comprehensive document corpus research
 """
 from mcp.server.fastmcp import FastMCP
 import sqlite3
-from typing import List, Dict, Any
+import json
+from datetime import datetime
+from typing import List, Dict, Any, Optional
 
-mcp = FastMCP("file-search-server")
+mcp = FastMCP("file-search-server-v2")
 
 def get_db_connection():
-    return sqlite3.connect("/Users/aaron/Projects/mcp-servers/file-search-server-v3/data/filebrowser.db")
+    return sqlite3.connect("/Users/aaron/Projects/mcp-servers/file-catalog/data/filecatalog.db")
+
+def soundex(name: str) -> str:
+    """Simple soundex implementation for German names"""
+    if not name:
+        return "0000"
+    
+    name = name.upper().replace('Ä', 'AE').replace('Ö', 'OE').replace('Ü', 'UE').replace('ß', 'SS')
+    
+    # Keep first letter
+    soundex_code = name[0]
+    
+    # Replace consonants with digits
+    mapping = {
+        'B': '1', 'F': '1', 'P': '1', 'V': '1',
+        'C': '2', 'G': '2', 'J': '2', 'K': '2', 'Q': '2', 'S': '2', 'X': '2', 'Z': '2',
+        'D': '3', 'T': '3',
+        'L': '4',
+        'M': '5', 'N': '5',
+        'R': '6'
+    }
+    
+    for i in range(1, len(name)):
+        if name[i] in mapping:
+            soundex_code += mapping[name[i]]
+    
+    # Remove duplicates and pad to 4 characters
+    clean_code = soundex_code[0]
+    for i in range(1, len(soundex_code)):
+        if soundex_code[i] != soundex_code[i-1]:
+            clean_code += soundex_code[i]
+    
+    return (clean_code + "0000")[:4]
 
 @mcp.tool()
-async def getData(search_terms: List[str], search_mode: str = "OR") -> List[Dict[str, Any]]:
+async def semantic_expression_search(query: str) -> List[Dict[str, Any]]:
     """
-    Enhanced search with multiple search terms and different modes
+    Searches documents based on semantic expression in natural language (German).
     
     Args:
-        search_terms: List of search terms
-        search_mode: "OR" (any term), "AND" (all terms), "PHRASE" (exact phrase)
+        query: Natural language expression or topic, e.g. 'Fusion Middleware Architektur'
     """
-    print(f"DEBUG: getData called with search_terms: {search_terms}, mode: {search_mode}")
-    print(f"DEBUG: Type of search_terms: {type(search_terms)}")
-    if search_terms:
-        for i, term in enumerate(search_terms):
-            print(f"DEBUG: Term {i}: '{term}' (type: {type(term)})")
+    print(f"DEBUG: semantic_expression_search called with query: {query}")
     
     conn = get_db_connection()
     cursor = conn.cursor()
     
     try:
-        # Build search query from search terms
-        if not search_terms:
-            search_terms = ["Ihring"]  # Default fallback
+        # Clean and prepare FTS5 query
+        clean_query = query.replace('"', '').replace("'", '').strip()
+        if not clean_query:
+            return []
         
-        # Clean search terms - remove problematic characters for FTS
-        clean_terms = []
-        for term in search_terms:
-            # Remove problematic characters for FTS but keep meaningful punctuation
-            clean_term = str(term).replace('"', '').replace("'", '').strip()
-            if clean_term:  # Only add non-empty terms
-                clean_terms.append(clean_term)
-        
-        if not clean_terms:
-            clean_terms = ["Ihring"]  # Fallback
-        
-        # Build enhanced search query based on search mode
-        if search_mode.upper() == "AND":
-            # All terms must be present
-            search_query = " AND ".join(clean_terms)
-        elif search_mode.upper() == "PHRASE":
-            # Exact phrase search
-            search_query = '"' + " ".join(clean_terms) + '"'
-        else:
-            # Default OR logic - any term
-            search_query = " OR ".join(clean_terms)
-            
-        print(f"DEBUG: Original terms: {search_terms}")
-        print(f"DEBUG: Cleaned terms: {clean_terms}")
-        print(f"DEBUG: Search mode: {search_mode}")
-        print(f"DEBUG: Final FTS search query: '{search_query}'")
-        
-        query = """
+        # Use FTS5 search across content fields
+        sql = """
         SELECT 
-            d.created_at,
+            d.id,
             d.filename,
             d.file_path,
-            SUBSTR(COALESCE(d.original_text, d.markdown_content, ''), 1, 200) as content_preview
-        FROM documents_fts_extended fts
+            d.created_at,
+            SUBSTR(COALESCE(d.original_text, d.markdown_content, d.summary, ''), 1, 300) as content_preview
+        FROM documents_fts fts
         JOIN documents d ON d.id = fts.rowid
-        WHERE documents_fts_extended MATCH ?
-        LIMIT 100
+        WHERE documents_fts MATCH ?
+        ORDER BY rank
+        LIMIT 50
         """
         
-        cursor.execute(query, [search_query])
+        cursor.execute(sql, [clean_query])
         rows = cursor.fetchall()
         
         results = []
         for row in rows:
             results.append({
-                "created_at": row[0],
-                "filename": row[1], 
+                "id": row[0],
+                "filename": row[1],
                 "file_path": row[2],
-                "content_preview": row[3]
+                "created_at": row[3],
+                "content_preview": row[4]
             })
         
-        print(f"DEBUG: Found {len(results)} results")
-        for i, result in enumerate(results):
-            print(f"DEBUG: Result {i+1}: {result['filename']}")
-        
+        print(f"DEBUG: Found {len(results)} results for semantic search")
         return results
         
     except Exception as e:
-        print(f"ERROR: {e}")
+        print(f"ERROR in semantic_expression_search: {e}")
         return [{"error": str(e)}]
     finally:
         conn.close()
 
 @mcp.tool()
-async def search_with_auto_mode(search_terms: List[str]) -> List[Dict[str, Any]]:
+async def fuzzy_search_person(name: str) -> List[Dict[str, Any]]:
     """
-    Smart search that automatically detects the best search mode
+    Finds documents mentioning person with phonetically similar names (German input).
     
     Args:
-        search_terms: List of search terms
+        name: Person name, possibly with OCR errors (e.g. 'Muller' for 'Müller')
     """
-    print(f"DEBUG: search_with_auto_mode called with: {search_terms}")
+    print(f"DEBUG: fuzzy_search_person called with name: {name}")
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
     
     try:
-        # Auto-detect search mode based on input
-        if len(search_terms) == 1:
-            # Single term - just search normally
-            print(f"DEBUG: Single term search with OR")
-            return await getData(search_terms, "OR")
-        elif len(search_terms) <= 3:
-            # 2-3 terms - try AND first (more precise), fallback to OR
-            print(f"DEBUG: Trying AND search first for {len(search_terms)} terms")
-            and_results = await getData(search_terms, "AND")
-            
-            # Check if AND results are good enough
-            if and_results and len(and_results) >= 5:  # Good number of results
-                print(f"DEBUG: AND search successful with {len(and_results)} results")
-                return and_results
-            else:
-                print(f"DEBUG: AND search returned {len(and_results) if and_results else 0} results, trying OR")
-                or_results = await getData(search_terms, "OR")
-                print(f"DEBUG: OR search returned {len(or_results) if or_results else 0} results")
-                return or_results if or_results else []
-        else:
-            # Many terms - use OR to avoid too restrictive search
-            print(f"DEBUG: Using OR search for {len(search_terms)} terms (avoiding too restrictive AND)")
-            return await getData(search_terms, "OR")
+        # Generate soundex for the input name
+        name_soundex = soundex(name)
+        normalized_name = name.upper().replace('Ä', 'AE').replace('Ö', 'OE').replace('Ü', 'UE').replace('ß', 'SS')
+        
+        print(f"DEBUG: Name soundex: {name_soundex}, normalized: {normalized_name}")
+        
+        # Search in persons_fuzzy table using soundex and normalized names
+        sql = """
+        SELECT DISTINCT
+            d.id,
+            d.filename,
+            d.file_path,
+            d.created_at,
+            pf.original_name,
+            SUBSTR(COALESCE(d.original_text, d.markdown_content, ''), 1, 300) as content_preview
+        FROM persons_fuzzy pf
+        JOIN documents d ON d.id = pf.document_id
+        WHERE pf.soundex_code = ? OR pf.normalized_name LIKE ?
+        ORDER BY d.created_at DESC
+        LIMIT 50
+        """
+        
+        cursor.execute(sql, [name_soundex, f"%{normalized_name}%"])
+        rows = cursor.fetchall()
+        
+        results = []
+        for row in rows:
+            results.append({
+                "id": row[0],
+                "filename": row[1],
+                "file_path": row[2],
+                "created_at": row[3],
+                "matched_person": row[4],
+                "content_preview": row[5]
+            })
+        
+        print(f"DEBUG: Found {len(results)} results for person fuzzy search")
+        return results
+        
     except Exception as e:
-        print(f"ERROR in search_with_auto_mode: {e}")
-        # Fallback to simple OR search
-        try:
-            return await getData(search_terms, "OR")
-        except Exception as e2:
-            print(f"ERROR in fallback search: {e2}")
-            return []
+        print(f"ERROR in fuzzy_search_person: {e}")
+        return [{"error": str(e)}]
+    finally:
+        conn.close()
+
+@mcp.tool()
+async def fuzzy_search_place(place: str) -> List[Dict[str, Any]]:
+    """
+    Finds documents mentioning places with similar sounding names (German input).
+    
+    Args:
+        place: Place name with possible spelling variation (e.g. 'Munchen' for 'München')
+    """
+    print(f"DEBUG: fuzzy_search_place called with place: {place}")
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        # Generate soundex for the input place
+        place_soundex = soundex(place)
+        normalized_place = place.upper().replace('Ä', 'AE').replace('Ö', 'OE').replace('Ü', 'UE').replace('ß', 'SS')
+        
+        print(f"DEBUG: Place soundex: {place_soundex}, normalized: {normalized_place}")
+        
+        # Search in places_fuzzy table using soundex and normalized places
+        sql = """
+        SELECT DISTINCT
+            d.id,
+            d.filename,
+            d.file_path,
+            d.created_at,
+            plf.original_place,
+            SUBSTR(COALESCE(d.original_text, d.markdown_content, ''), 1, 300) as content_preview
+        FROM places_fuzzy plf
+        JOIN documents d ON d.id = plf.document_id
+        WHERE plf.soundex_code = ? OR plf.normalized_place LIKE ?
+        ORDER BY d.created_at DESC
+        LIMIT 50
+        """
+        
+        cursor.execute(sql, [place_soundex, f"%{normalized_place}%"])
+        rows = cursor.fetchall()
+        
+        results = []
+        for row in rows:
+            results.append({
+                "id": row[0],
+                "filename": row[1],
+                "file_path": row[2],
+                "created_at": row[3],
+                "matched_place": row[4],
+                "content_preview": row[5]
+            })
+        
+        print(f"DEBUG: Found {len(results)} results for place fuzzy search")
+        return results
+        
+    except Exception as e:
+        print(f"ERROR in fuzzy_search_place: {e}")
+        return [{"error": str(e)}]
+    finally:
+        conn.close()
+
+@mcp.tool()
+async def search_by_date_range(start: str, end: str) -> List[Dict[str, Any]]:
+    """
+    Finds documents created between two dates (YYYY-MM-DD).
+    
+    Args:
+        start: Start date of range
+        end: End date of range  
+    """
+    print(f"DEBUG: search_by_date_range called with start: {start}, end: {end}")
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        # Validate date format
+        datetime.strptime(start, '%Y-%m-%d')
+        datetime.strptime(end, '%Y-%m-%d')
+        
+        sql = """
+        SELECT 
+            id,
+            filename,
+            file_path,
+            created_at,
+            SUBSTR(COALESCE(original_text, markdown_content, ''), 1, 300) as content_preview
+        FROM documents
+        WHERE DATE(created_at) BETWEEN ? AND ?
+        ORDER BY created_at DESC
+        LIMIT 100
+        """
+        
+        cursor.execute(sql, [start, end])
+        rows = cursor.fetchall()
+        
+        results = []
+        for row in rows:
+            results.append({
+                "id": row[0],
+                "filename": row[1],
+                "file_path": row[2],
+                "created_at": row[3],
+                "content_preview": row[4]
+            })
+        
+        print(f"DEBUG: Found {len(results)} results for date range search")
+        return results
+        
+    except ValueError as e:
+        print(f"ERROR: Invalid date format in search_by_date_range: {e}")
+        return [{"error": "Invalid date format. Use YYYY-MM-DD"}]
+    except Exception as e:
+        print(f"ERROR in search_by_date_range: {e}")
+        return [{"error": str(e)}]
+    finally:
+        conn.close()
+
+@mcp.tool()
+async def search_creation_date(created: str) -> List[Dict[str, Any]]:
+    """
+    Finds documents created on specific date (YYYY-MM-DD).
+    
+    Args:
+        created: Date when document was created
+    """
+    print(f"DEBUG: search_creation_date called with created: {created}")
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        # Validate date format
+        datetime.strptime(created, '%Y-%m-%d')
+        
+        sql = """
+        SELECT 
+            id,
+            filename,
+            file_path,
+            created_at,
+            SUBSTR(COALESCE(original_text, markdown_content, ''), 1, 300) as content_preview
+        FROM documents
+        WHERE DATE(created_at) = ?
+        ORDER BY created_at DESC
+        LIMIT 100
+        """
+        
+        cursor.execute(sql, [created])
+        rows = cursor.fetchall()
+        
+        results = []
+        for row in rows:
+            results.append({
+                "id": row[0],
+                "filename": row[1],
+                "file_path": row[2],
+                "created_at": row[3],
+                "content_preview": row[4]
+            })
+        
+        print(f"DEBUG: Found {len(results)} results for creation date search")
+        return results
+        
+    except ValueError as e:
+        print(f"ERROR: Invalid date format in search_creation_date: {e}")
+        return [{"error": "Invalid date format. Use YYYY-MM-DD"}]
+    except Exception as e:
+        print(f"ERROR in search_creation_date: {e}")
+        return [{"error": str(e)}]
+    finally:
+        conn.close()
+
+@mcp.tool()
+async def search_date_in_document(date: str) -> List[Dict[str, Any]]:
+    """
+    Finds documents mentioning specific date in content (YYYY-MM-DD).
+    
+    Args:
+        date: Specific date mentioned in document content
+    """
+    print(f"DEBUG: search_date_in_document called with date: {date}")
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        # Validate date format
+        datetime.strptime(date, '%Y-%m-%d')
+        
+        # Search in mentioned_dates JSON field and content
+        sql = """
+        SELECT 
+            id,
+            filename,
+            file_path,
+            created_at,
+            mentioned_dates,
+            SUBSTR(COALESCE(original_text, markdown_content, ''), 1, 300) as content_preview
+        FROM documents
+        WHERE mentioned_dates LIKE ? 
+           OR original_text LIKE ?
+           OR markdown_content LIKE ?
+        ORDER BY created_at DESC
+        LIMIT 100
+        """
+        
+        date_pattern = f"%{date}%"
+        cursor.execute(sql, [date_pattern, date_pattern, date_pattern])
+        rows = cursor.fetchall()
+        
+        results = []
+        for row in rows:
+            results.append({
+                "id": row[0],
+                "filename": row[1],
+                "file_path": row[2],
+                "created_at": row[3],
+                "mentioned_dates": row[4],
+                "content_preview": row[5]
+            })
+        
+        print(f"DEBUG: Found {len(results)} results for date in document search")
+        return results
+        
+    except ValueError as e:
+        print(f"ERROR: Invalid date format in search_date_in_document: {e}")
+        return [{"error": "Invalid date format. Use YYYY-MM-DD"}]
+    except Exception as e:
+        print(f"ERROR in search_date_in_document: {e}")
+        return [{"error": str(e)}]
+    finally:
+        conn.close()
+
+@mcp.tool()
+async def find_duplicates() -> List[Dict[str, Any]]:
+    """
+    Returns list of files with identical content (based on MD5 hash).
+    """
+    print("DEBUG: find_duplicates called")
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        sql = """
+        SELECT 
+            md5_hash,
+            COUNT(*) as duplicate_count,
+            GROUP_CONCAT(filename || ' (' || file_path || ')') as files
+        FROM documents
+        WHERE md5_hash IS NOT NULL AND md5_hash != ''
+        GROUP BY md5_hash
+        HAVING COUNT(*) > 1
+        ORDER BY duplicate_count DESC
+        LIMIT 100
+        """
+        
+        cursor.execute(sql)
+        rows = cursor.fetchall()
+        
+        results = []
+        for row in rows:
+            results.append({
+                "md5_hash": row[0],
+                "duplicate_count": row[1],
+                "files": row[2].split(',') if row[2] else []
+            })
+        
+        print(f"DEBUG: Found {len(results)} duplicate groups")
+        return results
+        
+    except Exception as e:
+        print(f"ERROR in find_duplicates: {e}")
+        return [{"error": str(e)}]
+    finally:
+        conn.close()
+
+@mcp.tool()
+async def get_document_content_by_id(id: int) -> Dict[str, Any]:
+    """
+    Returns full markdown content of document by ID.
+    
+    Args:
+        id: Internal document ID
+    """
+    print(f"DEBUG: get_document_content_by_id called with id: {id}")
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        sql = """
+        SELECT 
+            id,
+            filename,
+            file_path,
+            created_at,
+            original_text,
+            markdown_content,
+            summary,
+            document_type,
+            categories,
+            persons,
+            places
+        FROM documents
+        WHERE id = ?
+        """
+        
+        cursor.execute(sql, [id])
+        row = cursor.fetchone()
+        
+        if not row:
+            return {"error": f"Document with ID {id} not found"}
+        
+        result = {
+            "id": row[0],
+            "filename": row[1],
+            "file_path": row[2],
+            "created_at": row[3],
+            "original_text": row[4],
+            "markdown_content": row[5],
+            "summary": row[6],
+            "document_type": row[7],
+            "categories": row[8],
+            "persons": row[9],
+            "places": row[10]
+        }
+        
+        print(f"DEBUG: Retrieved document: {result['filename']}")
+        return result
+        
+    except Exception as e:
+        print(f"ERROR in get_document_content_by_id: {e}")
+        return {"error": str(e)}
+    finally:
+        conn.close()
+
+@mcp.tool()
+async def rank_documents_by_relevance(query: str, doc_ids: List[int]) -> List[Dict[str, Any]]:
+    """
+    Ranks list of documents based on relevance to query.
+    
+    Args:
+        query: Search query for relevance ranking
+        doc_ids: List of document IDs to rank
+    """
+    print(f"DEBUG: rank_documents_by_relevance called with query: {query}, doc_ids: {doc_ids}")
+    
+    if not doc_ids:
+        return []
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        # Create placeholders for IN clause
+        placeholders = ','.join('?' * len(doc_ids))
+        
+        # Use FTS5 ranking with bm25 if available, otherwise simple text matching
+        sql = f"""
+        SELECT 
+            d.id,
+            d.filename,
+            d.file_path,
+            d.created_at,
+            CASE 
+                WHEN d.original_text LIKE ? THEN 3
+                WHEN d.markdown_content LIKE ? THEN 2  
+                WHEN d.summary LIKE ? THEN 1
+                ELSE 0
+            END as relevance_score,
+            SUBSTR(COALESCE(d.original_text, d.markdown_content, ''), 1, 300) as content_preview
+        FROM documents d
+        WHERE d.id IN ({placeholders})
+        ORDER BY relevance_score DESC, d.created_at DESC
+        """
+        
+        query_pattern = f"%{query}%"
+        params = [query_pattern, query_pattern, query_pattern] + doc_ids
+        
+        cursor.execute(sql, params)
+        rows = cursor.fetchall()
+        
+        results = []
+        for row in rows:
+            results.append({
+                "id": row[0],
+                "filename": row[1],
+                "file_path": row[2],
+                "created_at": row[3],
+                "relevance_score": row[4],
+                "content_preview": row[5]
+            })
+        
+        print(f"DEBUG: Ranked {len(results)} documents by relevance")
+        return results
+        
+    except Exception as e:
+        print(f"ERROR in rank_documents_by_relevance: {e}")
+        return [{"error": str(e)}]
+    finally:
+        conn.close()
 
 @mcp.tool()
 async def get_database_stats() -> Dict[str, Any]:
     """
-    Simple database stats
+    Returns comprehensive database statistics.
     """
     print("DEBUG: get_database_stats called")
     
@@ -151,18 +574,35 @@ async def get_database_stats() -> Dict[str, Any]:
     cursor = conn.cursor()
     
     try:
+        stats = {}
+        
+        # Count documents
         cursor.execute("SELECT COUNT(*) FROM documents")
-        total_files = cursor.fetchone()[0]
+        stats["total_documents"] = cursor.fetchone()[0]
         
-        print(f"DEBUG: Total files: {total_files}")
+        # Count chunks
+        cursor.execute("SELECT COUNT(*) FROM chunks")
+        stats["total_chunks"] = cursor.fetchone()[0]
         
-        return {
-            "total_files": total_files,
-            "status": "working"
-        }
+        # Count persons_fuzzy entries
+        cursor.execute("SELECT COUNT(*) FROM persons_fuzzy")
+        stats["total_persons"] = cursor.fetchone()[0]
+        
+        # Count places_fuzzy entries  
+        cursor.execute("SELECT COUNT(*) FROM places_fuzzy")
+        stats["total_places"] = cursor.fetchone()[0]
+        
+        # Recent documents
+        cursor.execute("SELECT COUNT(*) FROM documents WHERE DATE(created_at) >= DATE('now', '-7 days')")
+        stats["recent_documents"] = cursor.fetchone()[0]
+        
+        stats["status"] = "operational"
+        
+        print(f"DEBUG: Database stats: {stats}")
+        return stats
         
     except Exception as e:
-        print(f"ERROR: {e}")
+        print(f"ERROR in get_database_stats: {e}")
         return {"error": str(e)}
     finally:
         conn.close()

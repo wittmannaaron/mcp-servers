@@ -7,7 +7,7 @@ import json
 
 def test_ollama_keyword_extraction():
     ollama_url = "http://localhost:11434"
-    model_name = "llama3.2:latest"
+    model_name = "catalog-browser"
     
     # Test sentences
     test_sentences = [

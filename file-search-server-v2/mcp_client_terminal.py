@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 MCP Client Terminal Interface for File Search Server (German Version)
-Connects to the file search MCP server and uses Ollama llama3.2 for responses
+Connects to the file search MCP server and uses Ollama catalog-browser for responses
 """
 
 import asyncio
@@ -20,14 +20,14 @@ import uuid
 class MCPClientTerminal:
     def __init__(self):
         self.ollama_url = "http://localhost:11434"
-        self.model_name = "llama3.2:latest"
+        self.model_name = "catalog-browser"
         self.mcp_process = None
         self.running = True
         self.mcp_initialized = False
         self.available_tools = []
         
-        # Load system prompt
-        self.system_prompt = self.load_system_prompt()
+        # System prompt will be loaded after tool discovery
+        self.system_prompt = None
         
         # Set up signal handlers
         signal.signal(signal.SIGINT, self.signal_handler)
@@ -42,12 +42,35 @@ class MCPClientTerminal:
         sys.exit(0)
     
     def load_system_prompt(self) -> str:
-        """Load system prompt from file"""
+        """Load system prompt from file and inject dynamic tool list"""
         try:
             with open("system_prompt.txt", "r", encoding="utf-8") as f:
-                return f.read().strip()
+                prompt = f.read().strip()
+                
+            # If we have discovered tools, inject them into the prompt
+            if self.available_tools:
+                prompt = self.inject_tools_into_prompt(prompt)
+                
+            return prompt
         except FileNotFoundError:
-            return "Du bist ein hilfreicher Dateisuch-Assistent. Hilf Benutzern beim Finden und Verstehen ihrer Dateien."
+            fallback_prompt = "Du bist ein hilfreicher Dateisuch-Assistent. Hilf Benutzern beim Finden und Verstehen ihrer Dateien."
+            if self.available_tools:
+                return self.inject_tools_into_prompt(fallback_prompt)
+            return fallback_prompt
+    
+    def inject_tools_into_prompt(self, system_prompt: str) -> str:
+        """Inject available tools into system prompt"""
+        if not self.available_tools:
+            return system_prompt
+            
+        tool_descriptions = []
+        for tool in self.available_tools:
+            name = tool.get('name', 'unknown')
+            description = tool.get('description', 'No description available')
+            tool_descriptions.append(f"- {name}: {description}")
+        
+        tools_text = "\n".join(tool_descriptions)
+        return system_prompt.replace("{DYNAMIC_TOOL_LIST}", tools_text)
     
     def start_mcp_server(self) -> bool:
         """Start the MCP server"""
@@ -125,6 +148,8 @@ class MCPClientTerminal:
                     
                     # Discover tools
                     if self.discover_tools():
+                        # Load system prompt with discovered tools
+                        self.system_prompt = self.load_system_prompt()
                         self.mcp_initialized = True
                         return True
             
@@ -726,18 +751,18 @@ Output:""".format(query=query)
             return []
         
         try:
-            # Use simple getData instead of complex auto mode for now
-            # This avoids the auto-mode complexity that might be causing JSON issues
+            # Use semantic_expression_search for better German language support
+            # Join keywords into a single query for semantic search
+            query = " ".join(keywords)
             
             mcp_request = {
                 "jsonrpc": "2.0",
                 "id": str(uuid.uuid4()),
                 "method": "tools/call",
                 "params": {
-                    "name": "getData",
+                    "name": "semantic_expression_search",
                     "arguments": {
-                        "search_terms": keywords,
-                        "search_mode": search_mode
+                        "query": query
                     }
                 }
             }
@@ -806,7 +831,8 @@ Output:""".format(query=query)
         """Call Ollama with Llama 3.2 function calling format"""
         try:
             # Combine system prompt with user query
-            full_prompt = f"{self.system_prompt}\n\nUser query: {query}"
+            system_prompt = self.system_prompt or "Du bist ein hilfreicher Dateisuch-Assistent."
+            full_prompt = f"{system_prompt}\n\nUser query: {query}"
             
             ollama_request = {
                 "model": self.model_name,
@@ -896,7 +922,8 @@ Output:""".format(query=query)
         """Call Ollama and let it decide which tools to use"""
         try:
             # Create prompt that tells Ollama to extract keywords and call tools
-            full_prompt = f"""{self.system_prompt}
+            system_prompt = self.system_prompt or "Du bist ein hilfreicher Dateisuch-Assistent."
+            full_prompt = f"""{system_prompt}
 
 Benutzer-Frage: {query}
 
@@ -943,7 +970,8 @@ Für die Frage "{query}" solltest du:
         """Call Ollama API with query and context"""
         try:
             # Combine system prompt, context, and user query
-            full_prompt = f"{self.system_prompt}\n\nKontext:\n{context}\n\nBenutzer-Frage: {query}\n\nBitte gib eine hilfreiche Antwort basierend auf dem obigen Kontext."
+            system_prompt = self.system_prompt or "Du bist ein hilfreicher Dateisuch-Assistent."
+            full_prompt = f"{system_prompt}\n\nKontext:\n{context}\n\nBenutzer-Frage: {query}\n\nBitte gib eine hilfreiche Antwort basierend auf dem obigen Kontext."
             
             # Prepare Ollama request
             ollama_request = {
@@ -1019,7 +1047,7 @@ Für die Frage "{query}" solltest du:
         
         # Test connections
         if not self.test_ollama_connection():
-            print("Bitte stellen Sie sicher, dass Ollama läuft und llama3.2:latest installiert ist")
+            print("Bitte stellen Sie sicher, dass Ollama läuft und catalog-browser installiert ist")
             return
         
         if not self.start_mcp_server():

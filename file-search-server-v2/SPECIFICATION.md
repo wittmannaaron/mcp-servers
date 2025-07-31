@@ -1,509 +1,318 @@
-# File Search Server V2 - Technische Spezifikation
+# SPECIFICATION.md - Local Research Agent for Document Corpus
 
-## Überblick
+## Overview
+Technical specification for upgrading MCP file search server to comprehensive document research assistant with 9 specialized search tools.
 
-Dieses Dokument spezifiziert die Implementierung eines erweiterten MCP File Search Servers mit hybridem Suchansatz. Das System kombiniert FTS (Full-Text Search), Fuzzy-Matching für Schreibfehler und optional Vektor-basierte semantische Suche.
+**Version:** 2.0  
+**Target:** Llama3.2:3B via custom `catalog-browser` model  
+**Language:** German input/content, English system instructions  
+**Database:** `/Users/aaron/Projects/mcp-servers/file-catalog/data/filecatalog.db` (READ-ONLY)
 
-## Aktueller Stand
+## Core Capabilities
 
-### Vorhandene Datenbank-Struktur
+| Feature | Description |
+|---------|-------------|
+| Natural Language Queries | German queries with intelligent keyword extraction |
+| Multi-Step Search | Tool chaining for complex searches |
+| Fuzzy Matching | OCR error correction for names and places |
+| Semantic Search | Expression-based content matching |
+| Date Filtering | Creation dates and mentioned dates |
+| Duplicate Detection | MD5 hash-based duplicate finding |
+| Result Ranking | Relevance-based result ordering |
+| Session Memory | Progressive search refinement across turns |
 
-**Haupt-Tabelle: `documents`**
-```sql
-CREATE TABLE documents (
-    id INTEGER PRIMARY KEY,
-    uuid TEXT UNIQUE NOT NULL,
-    file_path TEXT UNIQUE NOT NULL,
-    filename TEXT NOT NULL,
-    extension TEXT,
-    size INTEGER,
-    mime_type TEXT,
-    md5_hash TEXT NOT NULL,
-    original_text TEXT,
-    markdown_content TEXT,
-    summary TEXT,
-    document_type TEXT,
-    categories TEXT,           -- JSON Array: ["Kategorie1", "Kategorie2"]
-    entities TEXT,             -- JSON Array: ["Entity1", "Entity2"]  
-    persons TEXT,              -- JSON Array: ["Person1", "Person2"]
-    places TEXT,               -- JSON Array: ["Ort1", "Ort2"]
-    mentioned_dates TEXT,      -- JSON Array: ["2024-01-01", "2024-02-15"]
-    file_references TEXT,      -- JSON Array: ["file1.pdf", "file2.docx"]
-    created_at TIMESTAMP,
-    updated_at TIMESTAMP,
-    indexed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-```
+## Database Schema (Existing)
 
-**Aktueller Datenbankstand:**
-- 88 Dokumente vollständig indexiert
-- Reichhaltige Metadaten (Personen, Orte, Kategorien) bereits extrahiert
-- Keine Duplikate, gute Datenqualität
-
-### Bereits implementierte FTS-Tabellen
-
-**Status:** ✅ Bereits erstellt und befüllt
-```sql
--- Basis FTS-Tabelle
-CREATE VIRTUAL TABLE documents_fts USING fts5(
-    original_text,
-    markdown_content, 
-    summary,
-    document_type,
-    categories,
-    entities,
-    persons,
-    places,
-    mentioned_dates,
-    file_references
-);
-
--- Erweiterte FTS-Tabelle (mit Dateinamen/Pfaden)
-CREATE VIRTUAL TABLE documents_fts_extended USING fts5(
-    id UNINDEXED,
-    filename,
-    file_path,
-    original_text,
-    markdown_content,
-    summary,
-    document_type,
-    categories,
-    entities,
-    persons,
-    places,
-    mentioned_dates
-);
-```
-
-### Bereits implementierte Trigger
-
-**Status:** ✅ Bereits erstellt und getestet
-
-**INSERT Trigger:**
-```sql
-CREATE TRIGGER documents_fts_insert 
-AFTER INSERT ON documents
-BEGIN
-    INSERT INTO documents_fts (...) VALUES (NEW.*);
-    INSERT INTO documents_fts_extended (...) VALUES (NEW.*);
-END;
-```
-
-**UPDATE Trigger:**
-```sql
-CREATE TRIGGER documents_fts_update 
-AFTER UPDATE ON documents
-BEGIN
-    UPDATE documents_fts SET [...] WHERE rowid = OLD.id;
-    UPDATE documents_fts_extended SET [...] WHERE id = OLD.id;
-END;
-```
-
-**DELETE Trigger:**
-```sql
-CREATE TRIGGER documents_fts_delete 
-AFTER DELETE ON documents
-BEGIN
-    DELETE FROM documents_fts WHERE rowid = OLD.id;
-    DELETE FROM documents_fts_extended WHERE id = OLD.id;
-END;
-```
-
-## Geplante Erweiterungen
-
-### 1. Fuzzy-Matching System
-
-**Ziel:** Behandlung von Schreibfehlern in Namen und Orten
-
-#### Neue Tabellen (zu erstellen)
+### Core Tables
+Based on `Database-Administration-Handbook.md`:
 
 ```sql
--- Normalisierte Personennamen für Fuzzy-Matching
-CREATE TABLE persons_fuzzy (
-    id INTEGER PRIMARY KEY,
-    document_id INTEGER,
-    original_name TEXT,
-    soundex_code TEXT,
-    normalized_name TEXT,
-    FOREIGN KEY (document_id) REFERENCES documents(id)
-);
+-- Main document table
+documents (
+    id, uuid, file_path, filename, extension, size, mime_type, md5_hash,
+    original_text, markdown_content, summary, document_type, categories,
+    entities, persons, places, mentioned_dates, file_references,
+    created_at, updated_at, indexed_at
+)
 
--- Normalisierte Ortsnamen für Fuzzy-Matching  
-CREATE TABLE places_fuzzy (
-    id INTEGER PRIMARY KEY,
-    document_id INTEGER,
-    original_place TEXT,
-    soundex_code TEXT,
-    normalized_place TEXT,
-    FOREIGN KEY (document_id) REFERENCES documents(id)
-);
+-- Document chunks for semantic search
+chunks (
+    id, document_id, chunk_index, content, char_count
+)
 
--- Indizes für Performance
-CREATE INDEX idx_persons_soundex ON persons_fuzzy(soundex_code);
-CREATE INDEX idx_persons_normalized ON persons_fuzzy(normalized_name);
-CREATE INDEX idx_places_soundex ON places_fuzzy(soundex_code);
-CREATE INDEX idx_places_normalized ON places_fuzzy(normalized_place);
+-- Embedding vectors for semantic matching
+chunk_vectors (
+    id, chunk_id, embedding_json
+)
+
+-- Fuzzy matching tables
+persons_fuzzy (
+    id, document_id, original_name, soundex_code, normalized_name
+)
+
+places_fuzzy (
+    id, document_id, original_place, soundex_code, normalized_place
+)
+
+-- FTS5 full-text search
+documents_fts (virtual table with FTS5 tokenization)
 ```
 
-#### Neue Trigger (zu erstellen)
+## MCP Tool Specifications
 
-```sql
--- Erweiterte Trigger für automatische Fuzzy-Tabellen-Updates
-CREATE TRIGGER documents_fuzzy_insert 
-AFTER INSERT ON documents
-BEGIN
-    -- Persons normalisieren
-    INSERT INTO persons_fuzzy (document_id, original_name, soundex_code, normalized_name)
-    SELECT 
-        NEW.id,
-        json_extract(value, '$'),
-        soundex(json_extract(value, '$')),
-        lower(trim(json_extract(value, '$')))
-    FROM json_each(NEW.persons)
-    WHERE json_extract(value, '$') != '';
-    
-    -- Places normalisieren
-    INSERT INTO places_fuzzy (document_id, original_place, soundex_code, normalized_place)
-    SELECT 
-        NEW.id,
-        json_extract(value, '$'),
-        soundex(json_extract(value, '$')),
-        lower(trim(json_extract(value, '$')))
-    FROM json_each(NEW.places)
-    WHERE json_extract(value, '$') != '';
-END;
+### 1. semantic_expression_search
+```json
+{
+  "name": "semantic_expression_search",
+  "description": "Searches documents based on semantic expression in natural language (German).",
+  "parameters": {
+    "query": {
+      "type": "string",
+      "description": "Natural language expression or topic, e.g. 'Fusion Middleware Architektur'"
+    }
+  }
+}
+```
+**Implementation:** FTS5 search across `original_text`, `markdown_content`, `summary` fields.
 
--- Entsprechende UPDATE und DELETE Trigger für Fuzzy-Tabellen
-CREATE TRIGGER documents_fuzzy_update 
-AFTER UPDATE ON documents
-BEGIN
-    DELETE FROM persons_fuzzy WHERE document_id = OLD.id;
-    DELETE FROM places_fuzzy WHERE document_id = OLD.id;
-    
-    -- Neue Einträge einfügen (analog zu INSERT)
-    [...]
-END;
+### 2. fuzzy_search_person
+```json
+{
+  "name": "fuzzy_search_person", 
+  "description": "Finds documents mentioning person with phonetically similar names (German input).",
+  "parameters": {
+    "name": {
+      "type": "string",
+      "description": "Person name, possibly with OCR errors (e.g. 'Muller' for 'Müller')"
+    }
+  }
+}
+```
+**Implementation:** Query `persons_fuzzy` table using soundex codes and normalized names.
 
-CREATE TRIGGER documents_fuzzy_delete 
-AFTER DELETE ON documents
-BEGIN
-    DELETE FROM persons_fuzzy WHERE document_id = OLD.id;
-    DELETE FROM places_fuzzy WHERE document_id = OLD.id;
-END;
+### 3. fuzzy_search_place
+```json
+{
+  "name": "fuzzy_search_place",
+  "description": "Finds documents mentioning places with similar sounding names (German input).",
+  "parameters": {
+    "place": {
+      "type": "string", 
+      "description": "Place name with possible spelling variation (e.g. 'Munchen' for 'München')"
+    }
+  }
+}
+```
+**Implementation:** Query `places_fuzzy` table using soundex codes and normalized places.
+
+### 4. search_by_date_range
+```json
+{
+  "name": "search_by_date_range",
+  "description": "Finds documents created between two dates (YYYY-MM-DD).",
+  "parameters": {
+    "start": {
+      "type": "string",
+      "format": "date",
+      "description": "Start date of range"
+    },
+    "end": {
+      "type": "string", 
+      "format": "date",
+      "description": "End date of range"
+    }
+  }
+}
+```
+**Implementation:** Filter `documents.created_at` between start and end dates.
+
+### 5. search_creation_date
+```json
+{
+  "name": "search_creation_date",
+  "description": "Finds documents created on specific date (YYYY-MM-DD).",
+  "parameters": {
+    "created": {
+      "type": "string",
+      "format": "date", 
+      "description": "Date when document was created"
+    }
+  }
+}
+```
+**Implementation:** Exact match on `documents.created_at` date component.
+
+### 6. search_date_in_document
+```json
+{
+  "name": "search_date_in_document",
+  "description": "Finds documents mentioning specific date in content (YYYY-MM-DD).",
+  "parameters": {
+    "date": {
+      "type": "string",
+      "format": "date",
+      "description": "Specific date mentioned in document content"
+    }
+  }
+}
+```
+**Implementation:** Search `mentioned_dates` JSON field and content for date references.
+
+### 7. find_duplicates
+```json
+{
+  "name": "find_duplicates",
+  "description": "Returns list of files with identical content (based on MD5 hash).",
+  "parameters": {}
+}
+```
+**Implementation:** Group by `md5_hash` where count > 1.
+
+### 8. get_document_content_by_id
+```json
+{
+  "name": "get_document_content_by_id",
+  "description": "Returns full markdown content of document by ID.",
+  "parameters": {
+    "id": {
+      "type": "integer",
+      "description": "Internal document ID"
+    }
+  }
+}
+```
+**Implementation:** Direct SELECT from `documents` table by ID.
+
+### 9. rank_documents_by_relevance
+```json
+{
+  "name": "rank_documents_by_relevance", 
+  "description": "Ranks list of documents based on relevance to query.",
+  "parameters": {
+    "query": {
+      "type": "string",
+      "description": "Search query for relevance ranking"
+    },
+    "doc_ids": {
+      "type": "array",
+      "items": {"type": "integer"},
+      "description": "List of document IDs to rank"
+    }
+  }
+}
+```
+**Implementation:** FTS5 ranking or embedding similarity scoring.
+
+## Tool Chaining Patterns
+
+### Progressive Search Refinement
+```
+User: "Ich suche etwas über Middleware in München mit Herrn Müller von 2023."
+
+Tool Chain:
+1. semantic_expression_search("Middleware") → get initial matches
+2. fuzzy_search_place("München") → filter by location  
+3. fuzzy_search_person("Müller") → filter by person
+4. search_by_date_range("2023-01-01", "2023-12-31") → apply date filter
+5. rank_documents_by_relevance("Middleware München Müller", doc_ids) → final ranking
 ```
 
-### 2. Vektor-Store System (Optional/Zukunft)
-
-**Technologie:** BGE-m3 via Ollama
-**Ziel:** Semantische Ähnlichkeitssuche
-
-#### Neue Tabelle (zu erstellen)
-
-```sql
-CREATE TABLE document_embeddings (
-    document_id INTEGER PRIMARY KEY,
-    content_embedding BLOB,          -- BGE-m3 Vektor für Inhalt
-    metadata_embedding BLOB,         -- BGE-m3 Vektor für Entitäten/Personen
-    summary_embedding BLOB,          -- BGE-m3 Vektor für Zusammenfassung
-    embedding_model TEXT DEFAULT 'bge-m3',
-    embedding_version TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (document_id) REFERENCES documents(id)
-);
-
-CREATE INDEX idx_embeddings_model ON document_embeddings(embedding_model);
+### Session State Management
+Track filters across conversation turns:
+```json
+{
+  "active_filters": {
+    "persons": ["Müller"],
+    "places": ["München"], 
+    "date_range": ["2023-01-01", "2023-12-31"],
+    "keywords": ["Middleware"]
+  },
+  "last_result_ids": [12, 17, 19]
+}
 ```
 
-## Neue MCP-Tools Spezifikation
+## System Prompt Integration
 
-### Haupttool: `getData`
-
-**Zweck:** Hybrid-Suche mit mehreren Strategien
+### Dynamic Tool List Injection
+Replace `{DYNAMIC_TOOL_LIST}` in `system_prompt.txt` with runtime tool discovery:
 
 ```python
-@mcp.tool()
-async def getData(
-    search_terms: List[str],                    # ["BMW", "Ihring", "2024"]
-    search_modes: List[str] = ["fts", "fuzzy"], # Aktivierte Suchmodi
-    fuzzy_tolerance: float = 0.8,               # Fuzzy-Matching Schwelle
-    max_results: int = 20,                      # Maximale Ergebnisse
-    date_filter: Optional[str] = None           # "2024", "2024-03" etc.
-) -> List[Dict[str, Any]]:
-    """
-    Natürlichsprachliche Dokumentensuche mit Hybrid-Strategien
+def inject_tools_into_prompt(system_prompt: str, available_tools: list) -> str:
+    tool_descriptions = []
+    for tool in available_tools:
+        tool_descriptions.append(f"- {tool['name']}: {tool['description']}")
     
-    Args:
-        search_terms: Liste von Suchbegriffen
-        search_modes: ["fts", "fuzzy", "vector"] - Welche Suchmethoden verwenden
-        fuzzy_tolerance: Ähnlichkeits-Schwelle für Fuzzy-Matching (0.0-1.0)
-        max_results: Maximale Anzahl zurückgegebener Dokumente
-        date_filter: Optional Datumsfilter (Jahr oder Jahr-Monat)
-    
-    Returns:
-        Liste von Dokumenten mit Relevanz-Scores und Match-Typ
-    """
+    tools_text = "\n".join(tool_descriptions)
+    return system_prompt.replace("{DYNAMIC_TOOL_LIST}", tools_text)
 ```
 
-### Interne Such-Strategien
+### German Language Optimization
+- Extract German keywords accurately
+- Handle German grammar patterns (e.g., "Herrn Müller", "von 2023")
+- Provide German error messages for missing parameters
+- Support German date formats and place names
 
-#### 1. FTS-Suche (bereits implementiert)
-```sql
--- Exakte Treffer in FTS-Tabelle
-SELECT d.id, d.filename, d.file_path, 
-       SUBSTR(COALESCE(d.original_text, d.markdown_content, ''), 1, 300) as content_preview,
-       'fts' as match_type,
-       rank as relevance_score
-FROM documents_fts_extended fts
-JOIN documents d ON d.id = fts.id
-WHERE documents_fts_extended MATCH ?
-ORDER BY rank
-```
+## Implementation Requirements
 
-#### 2. Fuzzy-Suche (zu implementieren)
-```sql
--- Schreibfehler-tolerante Suche in Personen
-SELECT DISTINCT d.id, d.filename, d.file_path,
-       SUBSTR(COALESCE(d.original_text, d.markdown_content, ''), 1, 300) as content_preview,
-       'fuzzy_person' as match_type,
-       similarity(pf.normalized_name, ?) as relevance_score
-FROM persons_fuzzy pf
-JOIN documents d ON d.id = pf.document_id
-WHERE pf.soundex_code = soundex(?)
-   OR similarity(pf.normalized_name, lower(?)) > ?
+### Database Access
+- **READ-ONLY** operations only
+- Use existing schema without modifications
+- Reference `Database-Administration-Handbook.md` for table structures
+- Handle NULL values gracefully in queries
 
--- Analoge Abfrage für Orte in places_fuzzy
-```
+### Model Integration
+- Replace all `llama3.2` references with `catalog-browser`
+- Use custom modelfile with German language optimization
+- Support tool chaining through session management
+- Maintain JSON response format consistency
 
-#### 3. Vektor-Suche (Zukunft)
-```sql
--- Semantische Ähnlichkeitssuche
-SELECT d.id, d.filename, d.file_path,
-       SUBSTR(COALESCE(d.original_text, d.markdown_content, ''), 1, 300) as content_preview,
-       'vector' as match_type,
-       cosine_similarity(de.content_embedding, ?) as relevance_score
-FROM document_embeddings de
-JOIN documents d ON d.id = de.document_id
-WHERE cosine_similarity(de.content_embedding, ?) > 0.7
-ORDER BY relevance_score DESC
-```
+### Client Compatibility
+- Support both terminal (`mcp_client_terminal.py`) and webkit (`webkit_real_client.py`) clients
+- Preserve existing webkit UI/UX
+- Add German language support for error handling
+- Implement progressive search refinement
 
-### Hybrid-Ranking-Algorithmus
+## Performance Targets
 
+- **Search Response Time:** < 2 seconds per tool
+- **Tool Chaining:** Support up to 5 tools per query
+- **Result Accuracy:** > 90% relevant results for German queries
+- **Memory Usage:** < 500MB for client + server
+- **Concurrent Users:** Support 10+ simultaneous sessions
+
+## Testing Scenarios
+
+### German Query Patterns
 ```python
-def combine_and_rank_results(fts_results, fuzzy_results, vector_results=None):
-    """
-    Kombiniert und rankt Ergebnisse aus verschiedenen Suchstrategien
-    
-    Gewichtung:
-    - FTS: 1.0 (exakte Treffer höchste Priorität)
-    - Fuzzy: 0.8 (Schreibfehler-Korrekturen)  
-    - Vector: 0.6 (semantische Ähnlichkeit)
-    """
-    combined = {}
-    
-    # FTS-Ergebnisse (höchste Gewichtung)
-    for result in fts_results:
-        doc_id = result['id']
-        combined[doc_id] = {
-            **result,
-            'combined_score': result['relevance_score'] * 1.0,
-            'match_types': ['fts']
-        }
-    
-    # Fuzzy-Ergebnisse hinzufügen
-    for result in fuzzy_results:
-        doc_id = result['id']
-        fuzzy_score = result['relevance_score'] * 0.8
-        
-        if doc_id in combined:
-            # Bestehenden Score verbessern
-            combined[doc_id]['combined_score'] += fuzzy_score * 0.5
-            combined[doc_id]['match_types'].append(result['match_type'])
-        else:
-            # Neues Ergebnis
-            combined[doc_id] = {
-                **result,
-                'combined_score': fuzzy_score,
-                'match_types': [result['match_type']]
-            }
-    
-    # Sortieren nach combined_score
-    return sorted(combined.values(), 
-                 key=lambda x: x['combined_score'], 
-                 reverse=True)
-```
-
-## System-Prompt Optimierung
-
-### Ollama Modelfile
-
-**Datei:** `fuzzy_search_llama.modelfile`
-```dockerfile
-FROM llama3.2:3b
-
-SYSTEM """You are a document search function caller.
-
-BEHAVIOR:
-- When users ask to find, search, or locate documents, call getData immediately
-- Extract key terms from queries: names, places, topics, dates
-- Use separate search terms rather than phrases
-- After receiving results, provide natural German summaries
-
-EXAMPLES:
-"BMW Dokumente von Ihring" → getData(["BMW", "Ihring"])
-"Hausbegehung 2024" → getData(["Hausbegehung", "2024"])
-"Dateien über Baltmannsweiler" → getData(["Baltmannsweiler"])
-
-FORBIDDEN:
-- Never explain function syntax
-- Never show JSON examples
-- Never say "you can call getData like this"
-
-ACT, don't explain."""
-
-PARAMETER temperature 0.2
-PARAMETER top_p 0.9
-PARAMETER num_ctx 4096
-```
-
-### MCP-Tool System-Prompt
-
-```python
-SYSTEM_PROMPT = """Sie sind ein Dokumentensuch-Spezialist.
-
-VERHALTEN:
-- Bei Such-Anfragen: getData-Funktion sofort aufrufen
-- Suchbegriffe extrahieren: Namen, Orte, Themen, Daten
-- Nach Ergebnissen: Natürliche deutsche Zusammenfassung
-- Keine Syntax-Erklärungen oder JSON-Beispiele
-
-SUCHBEGRIFF-EXTRAKTION:
-- Schlüsselwörter aus Benutzer-Anfragen
-- Namen auch mit Tippfehlern (Ihring, Ihrings, Ihringer)
-- Orte und Adressen
-- Jahreszahlen und Daten
-- Themen und Kategorien
-
-Nach getData-Aufruf: Ergebnisse natürlich auf Deutsch zusammenfassen."""
-```
-
-## Implementierungsreihenfolge
-
-### Phase 1: Fuzzy-Matching Basis
-1. **Fuzzy-Tabellen erstellen** (`persons_fuzzy`, `places_fuzzy`)
-2. **Erweiterte Trigger implementieren** (Fuzzy-Updates)
-3. **Bestehende Daten migrieren** (alle 88 Dokumente in Fuzzy-Tabellen)
-4. **getData v1 erweitern** (FTS + Fuzzy)
-
-### Phase 2: Tool-Calling Optimierung  
-1. **Ollama Modelfile erstellen** und testen
-2. **System-Prompt optimieren** für Llama 3.2:3B
-3. **MCP-Client erweitern** mit verbessertem Tool-Handling
-4. **End-to-End Tests** mit realen Suchanfragen
-
-### Phase 3: Vektor-Store (Optional)
-1. **Embedding-Pipeline** mit BGE-m3/Ollama
-2. **Background-Service** für asynchrone Embedding-Erstellung
-3. **getData v2** mit Vektor-Suche
-4. **Performance-Optimierung** und Caching
-
-## Test-Szenarien
-
-### Fuzzy-Matching Tests
-```python
-test_cases = [
-    ("BMW von Ihrig", ["BMW", "Ihring"]),        # Schreibfehler in Namen
-    ("Dokumente Baltmansweiler", ["Baltmannsweiler"]),  # Schreibfehler in Orten
-    ("Auto Ihrings", ["Auto", "Ihring"]),        # Possessiv-Formen
-    ("Hausbegehung 2024", ["Hausbegehung", "2024"])  # Kombiniert
+test_queries = [
+    "Finde Dokumente über BMW von Herrn Ihring",
+    "Suche nach Middleware-Dokumenten aus München",
+    "Zeige mir alle Dateien aus 2023 über Hausbegehungen",
+    "Welche Duplikate gibt es in der Datenbank?",
+    "Lade den vollständigen Inhalt von Dokument 15"
 ]
 ```
 
-### Tool-Calling Tests
+### Tool Chaining Tests
 ```python
-llm_test_queries = [
-    "Finde BMW Dokumente",                    # Einfache Suche
-    "Zeige mir Dateien von Herrn Ihring",   # Person mit Titel
-    "Hausbegehung Baltmannsweiler 2024",    # Multi-Term mit Ort
-    "Was für Dateien hast du über Autos?"   # Thematische Suche
+complex_scenarios = [
+    "Multi-step search with person, place, and date filters",
+    "Progressive refinement across multiple conversation turns", 
+    "Error recovery when some tools return no results",
+    "Session state persistence during long conversations"
 ]
 ```
 
-## Performance-Anforderungen
+## Error Handling
 
-- **Suchzeit:** < 2 Sekunden für Hybrid-Suche
-- **Fuzzy-Matching:** > 0.8 Accuracy für Namen/Orte
-- **Tool-Calling:** > 95% Success Rate mit Llama 3.2:3B
-- **Datenbank:** Unterstützung für bis zu 100.000 Dokumente
+- **Missing Parameters:** German error messages requesting required information
+- **No Results Found:** Suggest alternative search terms or broader criteria
+- **Database Errors:** Graceful fallback to simpler queries
+- **Tool Chaining Failures:** Continue with partial results, report issues
 
-## Fehlerbehandlung
+## Future Enhancements
 
-### Fuzzy-Matching Fallbacks
-1. Soundex-Matching fehlgeschlagen → Levenshtein-Distanz
-2. Keine Fuzzy-Treffer → Fallback auf FTS mit Wildcards
-3. Alle Strategien fehlgeschlagen → Benutzer-Feedback für Suchbegriffe
-
-### Tool-Calling Fallbacks
-1. Llama 3.2 erklärt statt aufruft → System-Prompt-Anpassung
-2. JSON-Parsing fehlgeschlagen → Regex-Extraction
-3. MCP-Server nicht erreichbar → Direkte SQLite-Abfrage
-
-## Dateipfade und Konfiguration
-
-### Wichtige Dateien
-- **Datenbank:** `/Users/aaron/Projects/Simple_MCP_DB/filebrowser.db`
-- **MCP-Server:** `server.py` (aktuell)
-- **Client:** `mcp_client_terminal.py` (aktuell)
-- **System-Prompt:** `system_prompt.txt` (aktuell)
-- **Ollama Model:** `fuzzy_search_llama` (zu erstellen)
-
-### Ollama-Konfiguration
-- **Basis-Modell:** `llama3.2:3b`
-- **API-Endpoint:** `http://localhost:11434`
-- **BGE-m3 Model:** `bge-m3:latest` (für Vektor-Store)
-
-## Abhängigkeiten
-
-### Python-Packages (bereits vorhanden)
-```python
-# Aktuelle Abhängigkeiten
-from mcp.server.fastmcp import FastMCP
-import sqlite3
-import json
-import requests
-import subprocess
-
-# Zusätzlich benötigt für Fuzzy-Matching
-import difflib  # Für Ähnlichkeits-Berechnung
-import re      # Für String-Normalisierung
-
-# Zukünftig für Vektor-Store
-import numpy as np    # Für Vektor-Operationen
-import ollama        # Für BGE-m3 Embeddings
-```
-
-### Externe Tools
-- **Ollama:** Bereits installiert und laufend
-- **SQLite:** Bereits konfiguriert mit FTS5
-- **BGE-m3:** Bereits in Ollama verfügbar
-
-## Erfolgs-Metriken
-
-### Funktionale Tests
-- [ ] Fuzzy-Tabellen korrekt befüllt (88 Dokumente)
-- [ ] Trigger funktionieren bei INSERT/UPDATE/DELETE
-- [ ] getData-Tool findet Dokumente mit Schreibfehlern
-- [ ] Llama 3.2 ruft Tools auf (keine Erklärungen)
-- [ ] Hybrid-Ranking liefert relevante Ergebnisse
-
-### Performance-Tests  
-- [ ] Suchzeit < 2s für 20 Ergebnisse
-- [ ] Memory Usage < 500MB für Client+Server
-- [ ] 100% Tool-Call Success Rate über 50 Tests
-
----
-
-**Autor:** Claude & Aaron  
-**Datum:** 29. Juni 2025  
-**Version:** 1.0  
-**Status:** Bereit für Claude Code Implementierung
+- **Vector Search:** Add semantic similarity using embedding vectors
+- **Advanced Ranking:** Machine learning-based relevance scoring
+- **Real-time Updates:** Watch for new documents and update search index
+- **Export Functions:** Save search results to files or external systems

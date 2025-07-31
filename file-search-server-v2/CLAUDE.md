@@ -1,116 +1,82 @@
-# CLAUDE.md
-
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+# CLAUDE.md - Development Tasks
 
 ## Project Overview
+Upgrade MCP file search server from basic `getData` functionality to comprehensive document corpus research assistant with advanced search capabilities. Switch from `llama3.2` to custom `catalog-browser` model.
 
-This is an MCP (Model Context Protocol) File Search Server V2 that provides document search capabilities for local user files using Full-Text Search (FTS). The system is now at **Ground Zero** - a stable, working baseline for ongoing development.
+## Current Database Location
+**Database Path:** `/Users/aaron/Projects/mcp-servers/file-catalog/data/filecatalog.db`
 
-## Architecture
+## Task List
 
-### Core Components
+### 1. Model Migration
+**Priority: HIGH**
+- [ ] Replace all `llama3.2` references with `catalog-browser` across entire codebase
+- [ ] Update `mcp_client_terminal.py` model references
+- [ ] Update `webkit_real_client.py` model references  
+- [ ] Update system prompts and configuration files
+- [ ] Test model loading and functionality
 
-- **server.py**: Minimal FastMCP-based server with two search tools
-- **mcp_client_terminal.py**: Terminal client using Ollama llama3.2 with proper Llama 3.2 function calling
-- **system_prompt.txt**: Llama 3.2 compatible system prompt for function calling
-- **SPECIFICATION.md**: Technical specification for future extensions
-- **tests/**: Directory containing keyword extraction and prompt testing utilities
+### 2. MCP Server Enhancement  
+**Priority: HIGH**
+- [ ] Implement new search functions in `server.py` per SPECIFICATION.md:
+  - `semantic_expression_search(query: string)` - Natural language search
+  - `fuzzy_search_person(name: string)` - Person name fuzzy matching
+  - `fuzzy_search_place(place: string)` - Place name fuzzy matching  
+  - `search_by_date_range(start: date, end: date)` - Date range filtering
+  - `search_creation_date(created: date)` - Exact creation date search
+  - `search_date_in_document(date: date)` - Date mentioned in content
+  - `find_duplicates()` - MD5 hash duplicate detection
+  - `get_document_content_by_id(id: integer)` - Full document content retrieval
+  - `rank_documents_by_relevance(query: string, doc_ids: array)` - Result ranking
+- [ ] Use existing database schema (READ-ONLY access)
+- [ ] Reference `Database-Administration-Handbook.md` for SQL implementations
+- [ ] Implement tool chaining support for complex searches
 
-### Database Structure
+### 3. Client Updates
+**Priority: MEDIUM**
+- [ ] Update `mcp_client_terminal.py` to support new search functions
+- [ ] Update `webkit_real_client.py` to support new search functions
+- [ ] Maintain existing presentation layer in webkit client (NO UI changes)
+- [ ] Implement session state management for progressive search refinement
+- [ ] Add German language support for error messages
 
-The system uses SQLite with these key tables:
-- `documents`: Main table containing rich metadata
-- `documents_fts_extended`: FTS5 virtual table for full-text search
-- `persons_fuzzy`, `places_fuzzy`: Fuzzy matching tables (implemented but not currently used)
-- `New semantic functions added to database, tables like chunks and chunk_vectors can be used for semantic searches`
+### 4. System Prompt Enhancement
+**Priority: HIGH**
+- [ ] Inject available tools into `{DYNAMIC_TOOL_LIST}` placeholder in `system_prompt.txt`
+- [ ] Implement runtime tool discovery and prompt injection
+- [ ] Test tool chaining scenarios with German queries
+- [ ] Validate JSON response format consistency
 
-Database location: `/Users/aaron/Projects/mcp-server/file-search-server-v3/filebrowser.db`
+### 5. Environment & Dependencies
+**Priority: MEDIUM**
+- [ ] Fix webview installation issue (compilation error on macOS)
+- [ ] Update `requirements.txt` to include missing webview dependency
+- [ ] Test environment compatibility between different venv setups
+- [ ] Verify Python 3.13 compatibility
 
-## Current Status (before database changes)
+### 6. Documentation Updates
+**Priority: LOW**
+- [ ] Replace/update old `CLAUDE.md` with task-focused version
+- [ ] Create comprehensive `README.md` with setup instructions
+- [ ] Remove redundant `WEBKIT_DEVELOPMENT_GUIDE.md` content
+- [ ] Integrate useful webkit information into main documentation
 
-### ✅ Implemented and Working
-- **FTS Search**: Returns up to 5 results using exact SQL query
-- **Keyword Extraction**: LLM extracts search terms from German queries with 100% success rate
-- **Llama 3.2 Function Calling**: Proper format `[getData(search_terms=['Ihring'])]`
-- **MCP Communication**: Stable client-server communication 
-- **Real Data**: Returns actual database content when found
-- **WebKit-Client** GUI Client for chatting with data catalogue.
+## Implementation Constraints
 
-### 🔧 Currently Active Tools
-1. `getData(search_terms)` - FTS search returning up to 5 results
-2. `get_database_stats()` - Database statistics
+### Critical Requirements
+- **NO database schema changes allowed** - READ-ONLY access only
+- **Preserve webkit client presentation layer** - only modify MCP logic
+- **German language priority** - optimize for German document corpus
+- **Existing database schema** - use tables as documented in `Database-Administration-Handbook.md`
 
-## Development Commands
+### Success Criteria
+- All 9 new search tools implemented and functional
+- Tool chaining works for complex German queries
+- `catalog-browser` model replaces `llama3.2` completely
+- Webkit client maintains full functionality with enhanced search
+- No breaking changes to existing working features
 
-### Running the System
-```bash
-# Start terminal client (auto-starts server)
-python mcp_client_terminal.py
-```
-
-### Testing
-```bash
-# Test keyword extraction with different prompts
-python tests/test_keyword_extraction.py
-python tests/test_refined_prompts.py
-```
-
-### Dependencies
-- **Ollama**: localhost:11434 with llama3.2:latest 
-- **Python**: mcp.server.fastmcp, sqlite3, requests
-- **SQLite**: FTS5 extensions enabled
-
-## Code Architecture
-
-### Search Flow
-```
-# Till now:
-# German Query → LLM Keyword Extraction → MCP getData() → SQLite FTS → Results
-# New version (todo)
-German Query → LLM Keyword Extraction → MCP getData() → SQLite FTS + Semantic Search → Results
-```
-
-### Function Calling Format
-```python
-# LLM Response Format (Llama 3.2)
-[getData(search_terms=['Ihring', 'BMW'])]
-
-# Server Implementation  
-@mcp.tool()
-async def getData(search_terms: List[str]) -> List[Dict[str, Any]]:
-    # Returns up to 5 results from FTS search
-```
-
-## Keyword Extraction
-
-Uses proven prompt achieving 100% success rate:
-```
-"Bitte liste alle Dateien auf, die das Wort Ihring beinhalten" → Ihring
-"Finde Dateien über BMW" → BMW  
-"Suche nach Dokumenten mit Anke oder Familie" → Anke, Familie
-```
-
-## Next Development Phases
-
-1. **Dynamic Search Terms**: ✅ Completed - uses extracted keywords instead of hardcoded 'Ihring'
-2. **Fuzzy Search Integration**: Re-enable existing fuzzy tables for person/place matching
-3. **Vector Search**: Add semantic search capabilities
-4. **Advanced Features**: Multi-mode search ranking, filters, search by date, search in between two dates, etc.
-
-## Testing Strategy
-
-# Test files in `tests/` directory verify:
-Tests can be verified using the database entries and compare them to results.
-- Keyword extraction accuracy across different German sentence patterns
-- Function calling format compliance
-- LLM prompt effectiveness
-
-## Important Notes
-
-- **German Language**: System must be optimized for German queries and responses
-- **Local Files**: Searches user's local document collection only.
-- **Minimal Core**: Current implementation is intentionally minimal and stable
-- **Debug Output**: Extensive logging for development and troubleshooting (needs to be checked)
-- **Data Integrity**: Returns real database content when found; may hallucinate when no results found (might be fixed in using proper system prompt formating)
-
-
+## References
+- **Database Schema:** `Database-Administration-Handbook.md`
+- **Technical Specs:** `SPECIFICATION.md` 
+- **Product Requirements:** Document specifications in project root
