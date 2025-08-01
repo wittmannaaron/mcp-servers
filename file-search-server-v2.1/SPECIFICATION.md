@@ -8,15 +8,15 @@
 ## Overview
 Technical specification for catalog-client, a comprehensive document research assistant with specialized search tools.
 The client must be a graphical client, preferred is webkit.
-The results must be presented in a HTML-Interface. Following Data must be available: creation date, filename, file path, first 300 chars from markdown content. These informations must be arranged in a table like the following example:
+The results must be presented in a HTML-Interface. Following Data must be available: creation date, filename, file path, first 300 chars from markdown content, first date in document, source type. These informations must be arranged in a table like the following example:
 
-| creation date | filename  |
-|---------------------------|
-|      file path            |
-|---------------------------|
-| truncated markdown content|
+| creation date | first date in document | type | file name |
+|-----------------------------------------------------------|
+|                        file path                          |
+|-----------------------------------------------------------|
+|               truncated markdown content                  |
 
-That means in the first	row we have two columns, in the second and third row we have one column.
+That means in the first row we have four columns, in the second and third row we have one column each.
 
 Allow user to chat with the system in natural language, but the system's main purpose is to find data in database. The system should communicate in natural language, either by answering a simple question or if something went wrong. The system should support the user by providing search hints if a search doesn't return a result. The system must be able to keep search results in his chat memory as long as the user keeps the session open, so it will support the user to refine existing search results, allowing a drill down to a specific file with a specific pattern.
 The GUI should allow to sort the results, either by name, date, relevance. Default should be relevance.

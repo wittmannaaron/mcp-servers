@@ -1,16 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import './App.css';
 
 function App() {
   const [query, setQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
+  const [originalSearchResults, setOriginalSearchResults] = useState([]); // Store original results for filtering
   const [chatMessages, setChatMessages] = useState([]);
   const [currentMessage, setCurrentMessage] = useState('');
   const [sortBy, setSortBy] = useState('relevance'); // Default sort by relevance
   const [showMarkdownModal, setShowMarkdownModal] = useState(false);
   const [markdownContent, setMarkdownContent] = useState(null);
 
-  // Simple markdown to HTML converter
+  // Simple markdown to HTML converter with table support
   const convertMarkdownToHtml = (markdown) => {
     if (!markdown) return '';
     
@@ -18,9 +19,71 @@ function App() {
     const lines = markdown.split('\n');
     let html = '';
     let inList = false;
+    let inTable = false;
+    let tableHeaders = [];
+    let tableRows = [];
     
     for (let i = 0; i < lines.length; i++) {
       let line = lines[i];
+      
+      // Check for table separator (e.g., | --- | --- |)
+      const isTableSeparator = /^\s*\|?\s*-*\s*\|.*\|?\s*$/.test(line) && line.includes('---');
+      
+      // Check for table row (starts with |)
+      const isTableRow = /^\s*\|.*\|\s*$/.test(line) && !isTableSeparator;
+      
+      // Handle table parsing
+      if (isTableRow || isTableSeparator) {
+        if (isTableRow) {
+          if (!inTable) {
+            inTable = true;
+            // Parse header row
+            tableHeaders = line.split('|').map(cell => cell.trim()).filter((cell, index, arr) => {
+              // Filter out empty cells at the beginning and end
+              return !(index === 0 && cell === '') && !(index === arr.length - 1 && cell === '');
+            });
+          } else if (!isTableSeparator) {
+            // Parse data row
+            const rowCells = line.split('|').map(cell => cell.trim()).filter((cell, index, arr) => {
+              // Filter out empty cells at the beginning and end
+              return !(index === 0 && cell === '') && !(index === arr.length - 1 && cell === '');
+            });
+            tableRows.push(rowCells);
+          }
+        }
+        // Skip separator line
+        continue;
+      } else if (inTable) {
+        // Close table and add to HTML
+        html += '<table class="markdown-table">';
+        if (tableHeaders.length > 0) {
+          html += '<thead><tr>';
+          tableHeaders.forEach(header => {
+            html += `<th>${header}</th>`;
+          });
+          html += '</tr></thead>';
+        }
+        if (tableRows.length > 0) {
+          html += '<tbody>';
+          tableRows.forEach(row => {
+            html += '<tr>';
+            // Ensure row has enough cells to match headers
+            const cellsToRender = Math.max(row.length, tableHeaders.length);
+            for (let j = 0; j < cellsToRender; j++) {
+              const cellContent = j < row.length ? row[j] : '';
+              html += `<td>${cellContent}</td>`;
+            }
+            html += '</tr>';
+          });
+          html += '</tbody>';
+        }
+        html += '</table>';
+        
+        // Reset table state
+        inTable = false;
+        tableHeaders = [];
+        tableRows = [];
+      }
       
       // Headers
       if (line.startsWith('### ')) {
@@ -61,11 +124,38 @@ function App() {
       html += '</ul>';
     }
     
+    // Close any open table
+    if (inTable) {
+      html += '<table class="markdown-table">';
+      if (tableHeaders.length > 0) {
+        html += '<thead><tr>';
+        tableHeaders.forEach(header => {
+          html += `<th>${header}</th>`;
+        });
+        html += '</tr></thead>';
+      }
+      if (tableRows.length > 0) {
+        html += '<tbody>';
+        tableRows.forEach(row => {
+          html += '<tr>';
+          // Ensure row has enough cells to match headers
+          const cellsToRender = Math.max(row.length, tableHeaders.length);
+          for (let j = 0; j < cellsToRender; j++) {
+            const cellContent = j < row.length ? row[j] : '';
+            html += `<td>${cellContent}</td>`;
+          }
+          html += '</tr>';
+        });
+        html += '</tbody>';
+      }
+      html += '</table>';
+    }
+    
     // Apply inline formatting
     html = html
       // Bold
       .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-      // Italic  
+      // Italic
       .replace(/\*([^*]+)\*/g, '<em>$1</em>')
       // Code blocks (triple backticks)
       .replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
@@ -79,11 +169,52 @@ function App() {
     return html;
   };
 
+  // Effect to re-sort results when sortBy changes
+  useEffect(() => {
+    if (originalSearchResults.length > 0) {
+      let sortedResults = [...originalSearchResults];
+      if (sortBy === 'name') {
+        sortedResults.sort((a, b) => a.filename.localeCompare(b.filename));
+      } else if (sortBy === 'date') {
+        sortedResults.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      }
+      // Relevance is default and handled by the backend
+      setSearchResults(sortedResults);
+    }
+  }, [sortBy, originalSearchResults]);
+
   // Function to handle search
   const handleSearch = async (e) => {
     e.preventDefault();
     if (!query.trim()) return;
 
+    // If we already have search results, this is a drill-down search
+    if (searchResults.length > 0 && originalSearchResults.length > 0) {
+      // Filter existing results based on the query
+      const filteredResults = originalSearchResults.filter(result => {
+        // Check if query matches any of the result fields
+        const queryLower = query.toLowerCase();
+        return (
+          (result.filename && result.filename.toLowerCase().includes(queryLower)) ||
+          (result.file_path && result.file_path.toLowerCase().includes(queryLower)) ||
+          (result.content_preview && result.content_preview.toLowerCase().includes(queryLower)) ||
+          (result.first_date_in_document && result.first_date_in_document.toLowerCase().includes(queryLower))
+        );
+      });
+      
+      // Sort the filtered results
+      let sortedResults = [...filteredResults];
+      if (sortBy === 'name') {
+        sortedResults.sort((a, b) => a.filename.localeCompare(b.filename));
+      } else if (sortBy === 'date') {
+        sortedResults.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      }
+      
+      setSearchResults(sortedResults);
+      return;
+    }
+
+    // Otherwise, perform a new search
     try {
       const response = await fetch('http://localhost:5001/api/search', {
         method: 'POST',
@@ -95,6 +226,9 @@ function App() {
 
       const data = await response.json();
       if (data.results) {
+        // Store original results for filtering
+        setOriginalSearchResults(data.results);
+        
         // Sort results based on selected option
         let sortedResults = [...data.results];
         if (sortBy === 'name') {
@@ -108,6 +242,19 @@ function App() {
     } catch (error) {
       console.error('Search error:', error);
     }
+  };
+
+  // Function to reset drill-down filter
+  const resetFilter = () => {
+    // Reset to original search results
+    let sortedResults = [...originalSearchResults];
+    if (sortBy === 'name') {
+      sortedResults.sort((a, b) => a.filename.localeCompare(b.filename));
+    } else if (sortBy === 'date') {
+      sortedResults.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    }
+    setSearchResults(sortedResults);
+    setQuery(''); // Clear the search query
   };
 
   // Function to handle chat
@@ -136,6 +283,9 @@ function App() {
         
         // If we got search results, also update the search results display
         if (data.results && data.results.length > 0) {
+          // Store original results for filtering
+          setOriginalSearchResults(data.results);
+          
           // Sort results based on current sort option
           let sortedResults = [...data.results];
           if (sortBy === 'name') {
@@ -147,6 +297,7 @@ function App() {
         } else {
           // Clear search results if no results found
           setSearchResults([]);
+          setOriginalSearchResults([]);
         }
       }
       
@@ -239,10 +390,14 @@ function App() {
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Enter search query..."
+              placeholder={searchResults.length > 0 ? "Filter existing results..." : "Enter search query..."}
             />
             <button type="submit">Search</button>
-            
+            {searchResults.length > 0 && originalSearchResults.length > 0 && query && (
+              <button type="button" onClick={resetFilter} style={{ marginLeft: '10px' }}>
+                Reset Filter
+              </button>
+            )}
           </form>
         </div>
         
@@ -283,28 +438,34 @@ function App() {
                 return (
                   <table key={result.id} className="result-table">
                     <tbody>
-                      {/* First row: creation date | filename */}
+                      {/* First row: creation date | first date in document | source type | filename */}
                       <tr className="header-row">
                         <td className="date-cell">{formatDate(result.created_at)}</td>
-                        <td className="filename-cell clickable" 
+                        <td className="first-date-cell">
+                          {result.first_date_in_document || 'N/A'}
+                        </td>
+                        <td className="source-type-cell">
+                          {result.source_type === 'e-mail' ? 'E-Mail' : result.source_type === 'archive' ? 'Archiv' : 'Datei'}
+                        </td>
+                        <td className="filename-cell clickable"
                             onClick={() => handleOpenFile(result.file_path)}
                             title="Klicken zum Öffnen der Datei">
                           {result.filename}
                         </td>
                       </tr>
-                      {/* Second row: file path (spans both columns) */}
+                      {/* Second row: file path (spans all columns) */}
                       <tr className="path-row">
-                        <td className="filepath-cell clickable" 
-                            colSpan="2"
+                        <td className="filepath-cell clickable"
+                            colSpan="4"
                             onClick={() => handleOpenFolder(result.file_path)}
                             title="Klicken zum Öffnen des Ordners im Finder">
                           {result.file_path}
                         </td>
                       </tr>
-                      {/* Third row: truncated markdown content (spans both columns) */}
+                      {/* Third row: truncated markdown content (spans all columns) */}
                       <tr className="content-row">
-                        <td className="content-cell clickable" 
-                            colSpan="2"
+                        <td className="content-cell clickable"
+                            colSpan="4"
                             onClick={() => handleShowMarkdown(result.id, result.filename)}
                             title="Klicken für Markdown-Vorschau">
                           <div className="content-preview">
