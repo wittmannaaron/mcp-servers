@@ -10,6 +10,75 @@ function App() {
   const [showMarkdownModal, setShowMarkdownModal] = useState(false);
   const [markdownContent, setMarkdownContent] = useState(null);
 
+  // Simple markdown to HTML converter
+  const convertMarkdownToHtml = (markdown) => {
+    if (!markdown) return '';
+    
+    // Split into lines for better processing
+    const lines = markdown.split('\n');
+    let html = '';
+    let inList = false;
+    
+    for (let i = 0; i < lines.length; i++) {
+      let line = lines[i];
+      
+      // Headers
+      if (line.startsWith('### ')) {
+        html += `<h3>${line.substring(4)}</h3>`;
+      } else if (line.startsWith('## ')) {
+        html += `<h2>${line.substring(3)}</h2>`;
+      } else if (line.startsWith('# ')) {
+        html += `<h1>${line.substring(2)}</h1>`;
+      }
+      // List items
+      else if (line.startsWith('- ')) {
+        if (!inList) {
+          html += '<ul>';
+          inList = true;
+        }
+        html += `<li>${line.substring(2)}</li>`;
+      }
+      // Empty line
+      else if (line.trim() === '') {
+        if (inList) {
+          html += '</ul>';
+          inList = false;
+        }
+        html += '<br>';
+      }
+      // Regular text
+      else {
+        if (inList) {
+          html += '</ul>';
+          inList = false;
+        }
+        html += `<p>${line}</p>`;
+      }
+    }
+    
+    // Close any open list
+    if (inList) {
+      html += '</ul>';
+    }
+    
+    // Apply inline formatting
+    html = html
+      // Bold
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+      // Italic  
+      .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+      // Code blocks (triple backticks)
+      .replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
+      // Inline code
+      .replace(/`(.*?)`/g, '<code>$1</code>')
+      // Links
+      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>')
+      // Clean up multiple br tags
+      .replace(/<br><br>/g, '<br>');
+    
+    return html;
+  };
+
   // Function to handle search
   const handleSearch = async (e) => {
     e.preventDefault();
@@ -288,7 +357,12 @@ function App() {
               </button>
             </div>
             <div className="modal-body">
-              <pre className="markdown-content">{markdownContent.content}</pre>
+              <div 
+                className="markdown-content" 
+                dangerouslySetInnerHTML={{ 
+                  __html: convertMarkdownToHtml(markdownContent.content) 
+                }}
+              />
             </div>
           </div>
         </div>

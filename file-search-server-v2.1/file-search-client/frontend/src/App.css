@@ -228,13 +228,98 @@ main {
 }
 
 .markdown-content {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 0.95em;
+  line-height: 1.6;
+  margin: 0;
+  color: #2c3e50;
+}
+
+.markdown-content h1 {
+  font-size: 1.8em;
+  font-weight: bold;
+  color: #1a1a1a;
+  margin: 0 0 16px 0;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #e1e4e8;
+}
+
+.markdown-content h2 {
+  font-size: 1.5em;
+  font-weight: bold;
+  color: #1a1a1a;
+  margin: 20px 0 12px 0;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #e1e4e8;
+}
+
+.markdown-content h3 {
+  font-size: 1.3em;
+  font-weight: bold;
+  color: #1a1a1a;
+  margin: 16px 0 8px 0;
+}
+
+.markdown-content p {
+  margin: 0 0 12px 0;
+}
+
+.markdown-content strong {
+  font-weight: bold;
+  color: #1a1a1a;
+}
+
+.markdown-content em {
+  font-style: italic;
+  color: #444;
+}
+
+.markdown-content ul {
+  margin: 8px 0 12px 20px;
+  padding: 0;
+}
+
+.markdown-content li {
+  margin: 4px 0;
+  list-style-type: disc;
+}
+
+.markdown-content code {
+  background-color: #f6f8fa;
+  border-radius: 3px;
+  padding: 2px 4px;
   font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
   font-size: 0.9em;
-  line-height: 1.5;
-  margin: 0;
-  white-space: pre-wrap;
-  word-wrap: break-word;
-  color: #2c3e50;
+  color: #d73a49;
+}
+
+.markdown-content pre {
+  background-color: #f6f8fa;
+  border-radius: 6px;
+  padding: 12px;
+  margin: 12px 0;
+  overflow-x: auto;
+}
+
+.markdown-content pre code {
+  background: none;
+  padding: 0;
+  color: #24292e;
+}
+
+.markdown-content a {
+  color: #0366d6;
+  text-decoration: none;
+}
+
+.markdown-content a:hover {
+  text-decoration: underline;
+}
+
+.markdown-content hr {
+  border: none;
+  border-top: 1px solid #e1e4e8;
+  margin: 20px 0;
 }
 
 .chat-section {
