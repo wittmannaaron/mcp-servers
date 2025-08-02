@@ -56,6 +56,15 @@ main {
   margin-bottom: 20px;
 }
 
+.controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .sort-controls {
   margin-bottom: 20px;
   text-align: left;
@@ -72,6 +81,28 @@ main {
   border-radius: 4px;
   background-color: white;
   cursor: pointer;
+}
+
+.duplicate-controls button {
+  padding: 8px 16px;
+  background-color: #6c757d;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9em;
+}
+
+.duplicate-controls button:hover {
+  background-color: #5a6268;
+}
+
+.duplicate-controls button.active {
+  background-color: #28a745;
+}
+
+.duplicate-controls button.active:hover {
+  background-color: #218838;
 }
 
 .results-container {

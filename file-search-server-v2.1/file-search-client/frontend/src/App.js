@@ -5,6 +5,7 @@ function App() {
   const [query, setQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [originalSearchResults, setOriginalSearchResults] = useState([]); // Store original results for filtering
+  const [hideDuplicates, setHideDuplicates] = useState(false); // State for hiding duplicates
   const [chatMessages, setChatMessages] = useState([]);
   const [currentMessage, setCurrentMessage] = useState('');
   const [sortBy, setSortBy] = useState('relevance'); // Default sort by relevance
@@ -169,19 +170,39 @@ function App() {
     return html;
   };
 
-  // Effect to re-sort results when sortBy changes
+  // Function to filter out duplicates based on filename
+  const filterDuplicates = (results) => {
+    const seenFilenames = new Set();
+    return results.filter(result => {
+      if (seenFilenames.has(result.filename)) {
+        return false;
+      }
+      seenFilenames.add(result.filename);
+      return true;
+    });
+  };
+
+  // Effect to re-sort results when sortBy or hideDuplicates changes
   useEffect(() => {
     if (originalSearchResults.length > 0) {
-      let sortedResults = [...originalSearchResults];
+      let processedResults = [...originalSearchResults];
+      
+      // Apply duplicate filtering if enabled
+      if (hideDuplicates) {
+        processedResults = filterDuplicates(processedResults);
+      }
+      
+      // Apply sorting
       if (sortBy === 'name') {
-        sortedResults.sort((a, b) => a.filename.localeCompare(b.filename));
+        processedResults.sort((a, b) => a.filename.localeCompare(b.filename));
       } else if (sortBy === 'date') {
-        sortedResults.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+        processedResults.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
       }
       // Relevance is default and handled by the backend
-      setSearchResults(sortedResults);
+      
+      setSearchResults(processedResults);
     }
-  }, [sortBy, originalSearchResults]);
+  }, [sortBy, originalSearchResults, hideDuplicates]);
 
   // Function to handle search
   const handleSearch = async (e) => {
@@ -404,13 +425,23 @@ function App() {
         {searchResults.length > 0 && (
           <div className="results-section">
             <h2>Search Results ({searchResults.length})</h2>
-            <div className="sort-controls">
-              <label>Sort by: </label>
-              <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
-                <option value="relevance">Relevance</option>
-                <option value="name">Name</option>
-                <option value="date">Date</option>
-              </select>
+            <div className="controls">
+              <div className="sort-controls">
+                <label>Sort by: </label>
+                <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+                  <option value="relevance">Relevance</option>
+                  <option value="name">Name</option>
+                  <option value="date">Date</option>
+                </select>
+              </div>
+              <div className="duplicate-controls">
+                <button
+                  onClick={() => setHideDuplicates(!hideDuplicates)}
+                  className={hideDuplicates ? 'active' : ''}
+                >
+                  {hideDuplicates ? 'Show All Files' : 'Hide Duplicates'}
+                </button>
+              </div>
             </div>
             <div className="results-container">
               {searchResults.map((result) => {

@@ -18,6 +18,8 @@ The results must be presented in a HTML-Interface. Following Data must be availa
 
 That means in the first row we have four columns, in the second and third row we have one column each.
 
+The GUI includes a "Hide Duplicates" toggle button that allows users to temporarily hide duplicate files from the search results. When enabled, the system filters out duplicate entries based on filename, showing only the first occurrence of each file. This helps clean up the view when searching produces multiple entries for the same file. Users can toggle this feature on/off to switch between viewing all results and filtered results.
+
 Allow user to chat with the system in natural language, but the system's main purpose is to find data in database. The system should communicate in natural language, either by answering a simple question or if something went wrong. The system should support the user by providing search hints if a search doesn't return a result. The system must be able to keep search results in his chat memory as long as the user keeps the session open, so it will support the user to refine existing search results, allowing a drill down to a specific file with a specific pattern.
 The GUI should allow to sort the results, either by name, date, relevance. Default should be relevance.
 
@@ -36,6 +38,7 @@ The underlying LLM is a Llama3.2:3B. It uses a customized Modelfile, this is why
 | Semantic Search | Expression-based content matching |
 | Date Filtering | Creation dates and mentioned dates |
 | Duplicate Detection | MD5 hash-based duplicate finding |
+| Duplicate Filtering | Hide/show duplicate files in results view |
 | Result Ranking | Relevance-based result ordering |
 | Session Memory | Progressive search refinement across turns |
 
@@ -118,6 +121,7 @@ rank_documents_by_relevance	Ranks list of documents based on relevance to query.
 - Add German language support for error handling
 - Add copy and paste functionality
 - Implement progressive search refinement, like sorting the result for date oor relevance
+- Add duplicate filtering toggle in results view
 
 ## Performance Targets
 - **Search Response Time:** < 2 seconds per tool
