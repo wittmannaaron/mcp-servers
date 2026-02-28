@@ -298,3 +298,36 @@ cython_debug/
 #  and can be added to the global gitignore or merged into this file.  For a more nuclear
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
+
+# === Fork-spezifische Ergänzungen ===
+.mcp.json
+*.db
+*.db-journal
+*.db-wal
+*.db_bak*
+data/
+*.tgz
+*.tar.gz
+*.py_save
+*.backup
+.env
+logs/
+.claude/
+.roo/
+.windsurf/
+.cursor/
+.trae/
+.clinerules/
+.superdesign/
+configs/claude-desktop/claude_desktop_config.json
+configs/cline/cline_mcp_settings.json
+.DS_Store
+.metadata_never_index
+__pycache__/
+*.pyc
+venv/
+.venv/
+*-env/
+node_modules/
+CLAUDE.md
+*.docx

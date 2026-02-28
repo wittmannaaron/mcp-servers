@@ -1,0 +1,39 @@
+# File Catalog Dependencies
+
+# Core Dependencies
+python-dotenv>=1.0.0
+loguru>=0.7.2
+anyio>=4.0.0
+
+# Document Extraction Tools
+docling>=1.0.0              # PDF extraction (primary for PDFs)
+markitdown>=0.0.1a2         # Office documents (primary for non-PDFs)
+# Note: pandoc is system-level, installed via brew/apt
+# Note: exiftool is system-level, installed via brew/apt
+
+# MCP Integration
+mcp>=1.0.0                  # Model Context Protocol
+httpx>=0.25.0              # HTTP client for Ollama
+
+# AI/LLM Integration (Ollama)
+langchain>=0.3.26
+langchain-ollama>=0.1.0
+
+# Text Processing
+numpy>=1.24.0              # For embeddings and vector operations
+
+# Email Processing
+# email module is built-in to Python - no need to install
+
+# Archive Processing  
+# zipfile module is built-in to Python - no need to install
+
+# File System Operations
+# pathlib, mimetypes, hashlib modules are built-in to Python - no need to install
+
+# Utilities
+# uuid, json, subprocess modules are built-in to Python - no need to install
+
+# Optional: Enhanced text processing
+# beautifulsoup4>=4.12.0   # For HTML cleanup (if needed)
+# python-magic>=0.4.27     # For better MIME type detection (if needed)
