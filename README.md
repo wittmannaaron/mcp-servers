@@ -1,82 +1,118 @@
-# MCP Servers Konfiguration
+# MCP Servers - Fork mit eigenen Erweiterungen
 
-Dieses Repository enthält die Konfiguration für verschiedene MCP (Model Context Protocol) Server, die mit Claude und anderen KI-Assistenten verwendet werden können.
+> Fork von [modelcontextprotocol/servers](https://github.com/modelcontextprotocol/servers) mit eigenen MCP-Servern fuer lokale Dokumenten-Suche und -Katalogisierung.
 
-## Verzeichnisstruktur
+Dieses Repository erweitert die offiziellen MCP-Server um ein vollstaendiges Dokumenten-Management-System mit KI-gestuetzter Ingestion, semantischer Suche und nativer macOS-App.
+
+## Eigene Projekte
+
+### file-catalog (Dokument-Ingestion-System)
+
+**Pfad:** `file-catalog/`
+
+Ein fokussiertes Dokument-Ingestion-System mit KI-gestuetzter Analyse:
+
+- **Multi-Tool-Extraktion:** Intelligente Auswahl zwischen docling, markitdown und pandoc je nach Dateityp
+- **Ollama LLM Integration:** Lokale KI-Metadaten-Extraktion (Zusammenfassungen, Kategorien, Entitaeten)
+- **BGE-M3 Vektorembeddings:** Semantische Suche ueber 1024-dimensionale Vektoren
+- **FTS5 Volltext-Suche:** Trigger-basierte automatische Index-Synchronisation
+- **Fuzzy-Suche:** Phonetische Aehnlichkeitssuche (Soundex) fuer Personen- und Ortsnamen
+- **Multi-Format-Support:** PDF, Office (DOCX, XLSX, PPTX), Apple Pages, E-Mail (EML), ZIP-Archive, Bilder (OCR via Docling)
+- **macOS-optimiert:** Apple Pages via AppleScript, Hidden-File-Filterung
+
+### file-search-server (MCP-Such-Server)
+
+**Pfad:** `file-search-server/`
+
+MCP-Server mit 9 spezialisierten Such-Tools fuer die Dokumentensuche:
+
+| Tool | Funktion |
+|------|----------|
+| `search_file_content` | Inhaltssuche ueber mehrere Felder |
+| `search_by_category` | Kategorie-Filter (Familie, Bewerbung, etc.) |
+| `search_by_person` | Personensuche mit Fuzzy-Matching |
+| `search_files_by_date` | Datumsbereich-Filterung |
+| `find_duplicate_files` | Duplikat-Erkennung |
+| `search_by_filename` | Dateinamen-Muster |
+| `search_by_extension` | Dateityp-Filter |
+| `get_file_details` | Vollstaendige Metadaten |
+| `get_database_stats` | Datenbank-Statistiken |
+
+### file-search-server-v2 (Erweiterte Suche)
+
+**Pfad:** `file-search-server-v2/`
+
+Erweitert v1 um 9 spezialisierte Such-Tools, optimiert fuer deutsche Dokumente. Fuzzy-Suche fuer Personen/Orte (mit OCR-Fehlerkorrektur), semantische Suche, Tool-Chaining fuer komplexe Abfragen. Nativer macOS WebKit-Client.
+
+### file-search-server-v2.1 (Native macOS App)
+
+**Pfad:** `file-search-server-v2.1/`
+
+Vollstaendige native macOS-Anwendung:
+
+- **React-Frontend** mit klickbaren Tabellen (Datei oeffnen, Ordner oeffnen, Markdown-Vorschau)
+- **Flask-Backend** mit LLM-gestuetzter Keyword-Extraktion
+- **PyWebView-Integration** fuer native macOS-App
+- **Chat-Interface** und Sortierung nach Relevanz/Name/Datum
+
+### file-search-server-v3 (Semantic Search Engine)
+
+**Pfad:** `file-search-server-v3/`
+
+Vollstaendige Semantic Search Engine:
+
+- **BGE-M3 Embeddings:** 1024-dimensionale Vektorsuche
+- **Automatische Dateierkennung** und KI-Metadaten-Extraktion
+- **Markdown-bewusstes Chunking**
+- **Multi-Format-Support:** PDF, DOCX, EML, ZIP, Bilder
+- **Docling OCR:** Bildverarbeitung mit Layout-Analyse
+
+### file-search-server-v3.1 (Ingestion Pipeline)
+
+**Pfad:** `file-search-server-v3.1/`
+
+Fokussierte Dokument-Ingestion-Pipeline:
+
+- **Vision-LLM-Unterstuetzung:** Qwen2.5VL
+- **Remote-Ollama-Backend**
+- **Native macOS GUI** fuer Ingestion
+
+## Voraussetzungen
+
+- **macOS** (Linux-Portierung moeglich, Apple-spezifische Features entfallen)
+- **Python 3.13+**
+- **Ollama** mit Modellen: `llama3.2:latest`, `bge-m3`
+- **pandoc** (`brew install pandoc`)
+- **Node.js** (fuer React-Frontend in v2.1)
+
+## Entwicklungsverlauf
+
+Das Projekt entwickelte sich iterativ:
 
 ```
-/Users/aaron/Projects/mcp-servers/
-├── configs/                  # Konfigurationsdateien für verschiedene Clients
-│   ├── claude-desktop/       # Claude Desktop Konfigurationen
-│   │   └── claude_desktop_config.json
-│   ├── cline/                # Cline (VS Code Extension) Konfigurationen
-│   │   └── cline_mcp_settings.json
-│   └── andere-clients/       # Konfigurationen für andere Clients
-│       └── client_config.json
-├── servers/                  # Spezifische Server-Konfigurationen und Code
-│   ├── filesystem/           # Filesystem Server
-│   ├── sqlite/               # SQLite Server
-│   └── andere-server/        # Weitere Server
-└── shared/                   # Gemeinsam genutzte Ressourcen
-    └── data/                 # Gemeinsam genutzte Daten
+file-search-server (v1)    - MCP-Server mit 9 Such-Tools
+       |
+file-search-server-v2      - Deutsche Sprachoptimierung, Fuzzy-Suche
+       |
+file-search-server-v2.1    - React/Flask/PyWebView Native App
+       |
+file-search-server-v3      - Semantic Search mit BGE-M3
+       |
+file-search-server-v3.1    - Ingestion Pipeline, Vision-LLM
+       |
+file-catalog               - Konsolidiertes Ingestion-System (aktuell)
 ```
 
-## Aktuell konfigurierte Server
+## Upstream-Server
 
-### Filesystem Server
+Die Original-MCP-Server aus dem Upstream-Repository sind weiterhin unter `src/` verfuegbar:
 
-Der Filesystem Server ermöglicht den Zugriff auf Dateien und Verzeichnisse im Pfad `/Users/aaron/Projects/mcp-file-server`.
+- `src/filesystem` - Dateisystem-Zugriff
+- `src/sqlite` - SQLite-Datenbank
+- `src/brave-search` - Brave Web-Suche
+- `src/github` - GitHub-Integration
+- Und weitere (siehe [Original-Dokumentation](https://github.com/modelcontextprotocol/servers))
 
-Funktionen:
-- Dateien lesen und schreiben
-- Verzeichnisse erstellen, auflisten und löschen
-- Dateien/Verzeichnisse verschieben
-- Dateien suchen
-- Metadaten von Dateien abrufen
+## Lizenz
 
-## Symbolische Links
-
-Um die Konfigurationen zu verwenden, wurden symbolische Links erstellt:
-
-```bash
-# Für Claude Desktop
-ln -sf /Users/aaron/Projects/mcp-servers/configs/claude-desktop/claude_desktop_config.json "/Users/aaron/Library/Application Support/Claude/claude_desktop_config.json"
-```
-
-## Hinzufügen neuer Server
-
-Um einen neuen MCP-Server hinzuzufügen:
-
-1. Erstellen Sie ein neues Verzeichnis unter `servers/` für den Server
-2. Aktualisieren Sie die entsprechende Konfigurationsdatei unter `configs/`
-3. Starten Sie den Client neu, um die Änderungen zu übernehmen
-
-### Beispiel: Hinzufügen eines SQLite Servers
-
-Um einen SQLite Server hinzuzufügen, würden Sie die `claude_desktop_config.json` wie folgt aktualisieren:
-
-```json
-{
-  "mcpServers": {
-    "filesystem": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@modelcontextprotocol/server-filesystem",
-        "/Users/aaron/Projects/mcp-file-server"
-      ]
-    },
-    "sqlite": {
-      "command": "uvx",
-      "args": ["mcp-server-sqlite", "--database", "/path/to/your/database.db"]
-    }
-  }
-}
-```
-
-## Unterstützte Clients
-
-- **Claude Desktop**: Die offizielle Desktop-Anwendung von Anthropic
-- **Cline**: Eine VS Code-Erweiterung für Claude
-- **ChatMCP**: Eine plattformübergreifende Desktop-Anwendung
-- **MCPHub**: Eine Desktop-Anwendung für macOS und Windows
+Siehe [LICENSE](LICENSE) (MIT License, uebernommen vom Upstream-Repository).
